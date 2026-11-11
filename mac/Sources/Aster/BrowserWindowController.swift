@@ -25,7 +25,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     let context: BrowsingContext
     let pane: BrowserPane
     let tools: ToolsPanel
-    private let split = NSSplitView()
+    /// Page on the left, Study Tools on the right. NSSplitViewController owns
+    /// collapsing and expanding, so the sidebar always gets a real width.
+    private let splitController = NSSplitViewController()
+    private var toolsItem: NSSplitViewItem!
     private let addressField = NSTextField()
     private var editingAddress = false
     private var toolbarButtons: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
@@ -91,24 +94,42 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     required init?(coder: NSCoder) { nil }
 
     private func buildContent() {
-        split.isVertical = true
-        split.dividerStyle = .thin
-        // The find bar sits above the page and is hidden until ⌘F. Laid out by
-        // hand so it never competes with the split view's own sizing.
-        split.addArrangedSubview(PageContainer(findBar: findBar.view, page: pane.webView))
-        split.addArrangedSubview(tools.webView)
-        split.setHoldingPriority(.defaultLow, forSubviewAt: 0)
-        split.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
-        tools.webView.isHidden = !UserDefaults.standard.bool(forKey: "toolsVisible")
-        window?.contentView = split
-        if !tools.webView.isHidden {
+        // The find bar sits above the page and is hidden until ⌘F.
+        let pageController = NSViewController()
+        pageController.view = PageContainer(findBar: findBar.view, page: pane.webView)
+        let pageItem = NSSplitViewItem(viewController: pageController)
+        pageItem.minimumThickness = 320
+        pageItem.holdingPriority = .defaultLow
+
+        let toolsController = NSViewController()
+        toolsController.view = tools.webView
+        toolsItem = NSSplitViewItem(viewController: toolsController)
+        toolsItem.canCollapse = true
+        toolsItem.minimumThickness = 300
+        toolsItem.maximumThickness = 560
+        toolsItem.holdingPriority = NSLayoutConstraint.Priority(260)
+        toolsItem.isCollapsed = !UserDefaults.standard.bool(forKey: "toolsVisible")
+
+        splitController.splitView.isVertical = true
+        splitController.splitView.dividerStyle = .thin
+        splitController.addSplitViewItem(pageItem)
+        splitController.addSplitViewItem(toolsItem)
+        // Assigning a content view controller resizes the window to the
+        // controller's view; keep the intended window size.
+        let frame = window?.frame ?? .zero
+        window?.contentViewController = splitController
+        window?.setFrame(frame, display: false)
+        if !toolsItem.isCollapsed {
             DispatchQueue.main.async { [weak self] in self?.positionTools() }
         }
     }
 
+    /// Gives a freshly opened sidebar its usual width.
     private func positionTools() {
-        split.layoutSubtreeIfNeeded()
-        split.setPosition(max(320, split.bounds.width - Self.toolsWidth), ofDividerAt: 0)
+        let splitView = splitController.splitView
+        splitView.layoutSubtreeIfNeeded()
+        guard !toolsItem.isCollapsed, tools.webView.frame.width < Self.toolsWidth - 10 else { return }
+        splitView.setPosition(max(320, splitView.bounds.width - Self.toolsWidth), ofDividerAt: 0)
     }
 
     // MARK: Toolbar
@@ -304,12 +325,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     @IBAction func asterZoomOut(_ sender: Any?) { pane.webView.pageZoom = max(0.3, pane.webView.pageZoom - 0.1) }
     @IBAction func asterActualSize(_ sender: Any?) { pane.webView.pageZoom = 1 }
 
-    @IBAction func toggleTools(_ sender: Any?) { setToolsVisible(tools.webView.isHidden) }
+    @IBAction func toggleTools(_ sender: Any?) { setToolsVisible(toolsItem.isCollapsed) }
 
     func setToolsVisible(_ visible: Bool) {
-        tools.webView.isHidden = !visible
+        toolsItem.isCollapsed = !visible
         UserDefaults.standard.set(visible, forKey: "toolsVisible")
-        split.adjustSubviews()
         if visible { positionTools() }
     }
 
@@ -336,8 +356,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
 
     /// Widths of the page and the sidebar, for the self-test.
     var layoutWidths: (page: CGFloat, tools: CGFloat) {
-        split.layoutSubtreeIfNeeded()
-        return (split.arrangedSubviews[0].frame.width, tools.webView.isHidden ? 0 : tools.webView.frame.width)
+        splitController.splitView.layoutSubtreeIfNeeded()
+        let page = splitController.splitViewItems[0].viewController.view.frame.width
+        return (page, toolsItem.isCollapsed ? 0 : tools.webView.frame.width)
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
@@ -350,7 +371,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         case #selector(asterFindNext(_:)), #selector(asterFindPrevious(_:)):
             return !findBar.query.isEmpty || findBar.isVisible
         case #selector(toggleTools(_:)):
-            item.title = tools.webView.isHidden ? "Show Study Tools" : "Hide Study Tools"
+            item.title = toolsItem.isCollapsed ? "Show Study Tools" : "Hide Study Tools"
             return true
         default: return true
         }
