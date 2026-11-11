@@ -84,7 +84,7 @@ jobs:
         # --target creates the tag on this exact tested commit when it does
         # not exist yet (workflow_dispatch); for a pushed tag it already does.
         run: >
-          gh release create "$TAG" --target "$GITHUB_SHA" --prerelease
+          gh release create "$TAG" --target "$GITHUB_SHA" --latest
           --title "Aster $TAG"
           --notes-file docs/RELEASE_NOTES.md
           work/dist/*
