@@ -12,8 +12,9 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_DIRS = ['common', 'research', 'study', 'data', 'ai', 'storage']
-# Browser and Python tool tests need the full repository, so they stay out.
-EXCLUDED_TESTS = {'metadata.browser.test.mjs'}
+# Browser tests need Playwright and files outside the package, so they stay out.
+def is_packaged_test(path):
+    return not path.name.endswith('.browser.test.mjs')
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)
 
 
@@ -28,7 +29,7 @@ def package_files():
         for path in sorted((ROOT / 'aster' / name).glob('*.mjs')):
             files[path.relative_to(ROOT).as_posix()] = path
     for path in sorted((ROOT / 'tests').glob('*.test.mjs')):
-        if path.name not in EXCLUDED_TESTS:
+        if is_packaged_test(path):
             files[path.relative_to(ROOT).as_posix()] = path
     return files
 
