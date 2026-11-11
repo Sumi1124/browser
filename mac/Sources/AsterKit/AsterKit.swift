@@ -454,3 +454,104 @@ public enum StartPage {
         """
     }
 }
+
+// MARK: - Updates
+
+/// A `major.minor.patch` version, as in "0.5.0" or the tag "v0.5.0".
+public struct SemanticVersion: Comparable, CustomStringConvertible, Sendable {
+    public let major: Int
+    public let minor: Int
+    public let patch: Int
+
+    public init?(_ text: String) {
+        var value = text.trimmingCharacters(in: .whitespaces)
+        if value.hasPrefix("v") || value.hasPrefix("V") { value.removeFirst() }
+        let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3, let major = Int(parts[0]), let minor = Int(parts[1]), let patch = Int(parts[2]),
+              major >= 0, minor >= 0, patch >= 0, parts.allSatisfy({ $0.allSatisfy(\.isNumber) }) else { return nil }
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+    }
+
+    public var description: String { "\(major).\(minor).\(patch)" }
+
+    public static func < (lhs: SemanticVersion, rhs: SemanticVersion) -> Bool {
+        (lhs.major, lhs.minor, lhs.patch) < (rhs.major, rhs.minor, rhs.patch)
+    }
+}
+
+/// The parts of a GitHub release that the updater uses.
+public struct ReleaseInfo: Equatable, Sendable {
+    public struct Asset: Equatable, Sendable {
+        public let name: String
+        public let url: URL
+        public let size: Int
+        /// GitHub's own SHA-256 of the file, from the asset's "digest" field.
+        public let sha256: String?
+    }
+
+    public let version: SemanticVersion
+    public let notes: String
+    public let page: URL?
+    public let assets: [Asset]
+
+    public static func == (lhs: ReleaseInfo, rhs: ReleaseInfo) -> Bool {
+        lhs.version == rhs.version && lhs.notes == rhs.notes && lhs.page == rhs.page && lhs.assets == rhs.assets
+    }
+
+    /// Parses GitHub's `GET /repos/{owner}/{repo}/releases/latest` response.
+    /// Drafts and pre-releases are ignored, as are malformed assets.
+    public static func parse(_ data: Data) -> ReleaseInfo? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["draft"] as? Bool != true, json["prerelease"] as? Bool != true,
+              let tag = json["tag_name"] as? String, let version = SemanticVersion(tag) else { return nil }
+        let assets = (json["assets"] as? [[String: Any]] ?? []).compactMap { item -> Asset? in
+            guard let name = item["name"] as? String, let link = item["browser_download_url"] as? String,
+                  let url = URL(string: link), let size = item["size"] as? Int else { return nil }
+            var sha: String?
+            if let digest = item["digest"] as? String, digest.hasPrefix("sha256:") {
+                let hex = String(digest.dropFirst(7)).lowercased()
+                if hex.count == 64, hex.allSatisfy(\.isHexDigit) { sha = hex }
+            }
+            return Asset(name: name, url: url, size: size, sha256: sha)
+        }
+        let notes = String((json["body"] as? String ?? "").prefix(4000))
+        return ReleaseInfo(version: version, notes: notes, page: (json["html_url"] as? String).flatMap(URL.init(string:)), assets: assets)
+    }
+}
+
+public enum UpdatePolicy {
+    /// Hosts the disk image may be downloaded from (GitHub release downloads).
+    public static let downloadHosts: Set<String> = ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"]
+    public static let maxDownloadBytes = 300 * 1024 * 1024
+
+    /// The release's `Aster-<version>.dmg`, if it is a sensible HTTPS GitHub download.
+    public static func diskImage(in release: ReleaseInfo) -> ReleaseInfo.Asset? {
+        release.assets.first { asset in
+            asset.name == "Aster-\(release.version).dmg" && asset.url.scheme == "https"
+                && downloadHosts.contains(asset.url.host?.lowercased() ?? "") && asset.size > 0 && asset.size <= maxDownloadBytes
+        }
+    }
+
+    /// The expected SHA-256 for `assetName`: GitHub's digest if present, else
+    /// the line for it in the release's SHA256SUMS.txt.
+    public static func expectedSHA256(for asset: ReleaseInfo.Asset, sums: String?) -> String? {
+        if let sha = asset.sha256 { return sha }
+        guard let sums else { return nil }
+        for line in sums.split(whereSeparator: \.isNewline) {
+            let fields = line.split(separator: " ", omittingEmptySubsequences: true)
+            if fields.count == 2, fields[1] == Substring(asset.name), fields[0].count == 64, fields[0].allSatisfy(\.isHexDigit) {
+                return fields[0].lowercased()
+            }
+        }
+        return nil
+    }
+
+    /// Updates can't replace an app running from a disk image or from macOS's
+    /// randomised "App Translocation" location.
+    public static func canReplaceApp(at url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return !path.contains("/AppTranslocation/") && !path.hasPrefix("/Volumes/")
+    }
+}

@@ -158,3 +158,56 @@ final class MonogramTests: XCTestCase {
         XCTAssertEqual(StartPage.monogram(for: quoted).letter, "P")
     }
 }
+
+final class UpdateTests: XCTestCase {
+    func testVersions() {
+        XCTAssertEqual(SemanticVersion("v0.6.0")?.description, "0.6.0")
+        XCTAssertTrue(SemanticVersion("0.5.0")! < SemanticVersion("0.6.0")!)
+        XCTAssertTrue(SemanticVersion("0.9.9")! < SemanticVersion("0.10.0")!)
+        XCTAssertFalse(SemanticVersion("1.0.0")! < SemanticVersion("1.0.0")!)
+        for bad in ["", "1.0", "1.0.0.0", "1.0.x", "-1.0.0", "1.0.0-beta", "v"] { XCTAssertNil(SemanticVersion(bad), bad) }
+    }
+
+    private func release(_ extra: String = "") -> Data {
+        Data(#"""
+        {"tag_name":"v0.6.0","draft":false,"prerelease":false,"html_url":"https://github.com/Sumi1124/browser/releases/tag/v0.6.0","body":"Notes",\#(extra)
+         "assets":[
+          {"name":"Aster-0.6.0.dmg","size":941532,"browser_download_url":"https://github.com/Sumi1124/browser/releases/download/v0.6.0/Aster-0.6.0.dmg","digest":"sha256:AB4ECE821A3B36472586EA75D4567C4B321E1B8840D15006C9E96B590160066F"},
+          {"name":"SHA256SUMS.txt","size":367,"browser_download_url":"https://github.com/Sumi1124/browser/releases/download/v0.6.0/SHA256SUMS.txt"},
+          {"name":"broken"}]}
+        """#.utf8)
+    }
+
+    func testParsesReleaseAndPicksTheDiskImage() throws {
+        let info = try XCTUnwrap(ReleaseInfo.parse(release()))
+        XCTAssertEqual(info.version.description, "0.6.0")
+        XCTAssertEqual(info.assets.count, 2)
+        let dmg = try XCTUnwrap(UpdatePolicy.diskImage(in: info))
+        XCTAssertEqual(dmg.sha256, "ab4ece821a3b36472586ea75d4567c4b321e1b8840d15006c9e96b590160066f")
+        XCTAssertEqual(UpdatePolicy.expectedSHA256(for: dmg, sums: nil), dmg.sha256)
+        XCTAssertNil(ReleaseInfo.parse(Data(#"{"tag_name":"v0.6.0","prerelease":true,"assets":[]}"#.utf8)), "pre-releases are ignored")
+        XCTAssertNil(ReleaseInfo.parse(Data(#"{"tag_name":"latest","assets":[]}"#.utf8)))
+    }
+
+    func testRejectsUnsafeDownloads() {
+        let make = { (url: String, size: Int) in
+            ReleaseInfo(version: SemanticVersion("1.0.0")!, notes: "", page: nil,
+                        assets: [.init(name: "Aster-1.0.0.dmg", url: URL(string: url)!, size: size, sha256: nil)])
+        }
+        XCTAssertNotNil(UpdatePolicy.diskImage(in: make("https://github.com/a/b/releases/download/v1.0.0/Aster-1.0.0.dmg", 10)))
+        XCTAssertNil(UpdatePolicy.diskImage(in: make("http://github.com/x.dmg", 10)), "plain HTTP")
+        XCTAssertNil(UpdatePolicy.diskImage(in: make("https://evil.example/Aster-1.0.0.dmg", 10)), "other host")
+        XCTAssertNil(UpdatePolicy.diskImage(in: make("https://github.com/x.dmg", 0)), "empty")
+        XCTAssertNil(UpdatePolicy.diskImage(in: make("https://github.com/x.dmg", 400 * 1024 * 1024)), "too large")
+    }
+
+    func testChecksumFallbackAndAppLocation() {
+        let asset = ReleaseInfo.Asset(name: "Aster-1.0.0.dmg", url: URL(string: "https://github.com/x")!, size: 1, sha256: nil)
+        let sums = "\(String(repeating: "a", count: 64))  Aster-1.0.0.dmg\n\(String(repeating: "b", count: 64))  other.zip\n"
+        XCTAssertEqual(UpdatePolicy.expectedSHA256(for: asset, sums: sums), String(repeating: "a", count: 64))
+        XCTAssertNil(UpdatePolicy.expectedSHA256(for: asset, sums: "nothing here"))
+        XCTAssertTrue(UpdatePolicy.canReplaceApp(at: URL(fileURLWithPath: "/Applications/Aster.app")))
+        XCTAssertFalse(UpdatePolicy.canReplaceApp(at: URL(fileURLWithPath: "/Volumes/Aster 0.5.0/Aster.app")))
+        XCTAssertFalse(UpdatePolicy.canReplaceApp(at: URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/ABC/d/Aster.app")))
+    }
+}

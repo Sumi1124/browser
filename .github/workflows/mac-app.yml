@@ -27,7 +27,7 @@ jobs:
       - name: Build Aster.app and DMG
         run: bash mac/build.sh work/dist
       - name: Self-test the built app
-        run: mac/.build/stage/Aster.app/Contents/MacOS/Aster --self-test
+        run: ASTER_TEST_DMG="$(ls "$PWD"/work/dist/Aster-*.dmg)" mac/.build/stage/Aster.app/Contents/MacOS/Aster --self-test
       - name: Check the DMG contents
         run: |
           mount="$(mktemp -d)"
