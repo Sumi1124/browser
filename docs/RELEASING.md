@@ -2,6 +2,16 @@
 
 No native binaries or installers exist from this run. The included automated release workflow packages **source only** into a draft release for tags matching `v*-source`; it never labels source archives as a browser installer.
 
+## Module releases
+
+`release.yml` publishes a GitHub pre-release when a version tag such as `v0.2.0` is pushed:
+
+1. Set `version` in `package.json` and update `docs/RELEASE_NOTES.md`.
+2. Merge to `main`, then tag that commit: `git tag v0.2.0 && git push origin v0.2.0`.
+3. The workflow checks that the tag matches `package.json` and runs every test. It then builds `aster-modules-<version>.zip` with `scripts/package_modules.py` (a reproducible archive with its own README), builds the source archives, and writes `SHA256SUMS.txt`. Finally it unzips the package and re-runs its tests and demo in isolation before publishing.
+
+To build the zip locally, run `npm run package`; it writes to `work/dist/`. These releases contain JavaScript modules and source only, never a browser binary.
+
 ## Infrastructure
 
 Hosted Linux/macOS/Windows runners run the small core suite. Full Chromium native compilation uses the manual self-hosted workflow. Budget a 300 GiB SSD workspace, 32–64 GiB RAM, 8+ cores, native SDKs, long build time, dependency caches and artifact storage. Initial checkout/compilation can take hours. Runner-specific quotas and GitHub Actions/storage limits must be checked against the actual account before enabling native release jobs. Untrusted pull requests must not execute on persistent native runners with signing keys.

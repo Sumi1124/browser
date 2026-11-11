@@ -13,6 +13,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import apply_overlay
 import doctor
+import package_modules
+import re
+import zipfile
 
 class OverlayTests(unittest.TestCase):
     def setUp(self):
@@ -78,5 +81,35 @@ class DoctorTests(unittest.TestCase):
         with mock.patch('doctor.platform.system', return_value='Linux'):
             report = doctor.inspect(Path.cwd(), 'mac')
         self.assertTrue(any('Mac' in blocker for blocker in report['blockers']))
+
+class PackageTests(unittest.TestCase):
+    def test_modules_zip_is_complete_reproducible_and_self_contained(self):
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            archive = package_modules.build('9.9.9', Path(first))
+            again = package_modules.build('9.9.9', Path(second))
+            self.assertEqual(archive.read_bytes(), again.read_bytes())
+            with zipfile.ZipFile(archive) as bundle:
+                names = set(bundle.namelist())
+                prefix = 'aster-modules-9.9.9/'
+                self.assertTrue(all(name.startswith(prefix) for name in names))
+                for required in ['README.md', 'API.md', 'LICENSE', 'package.json', 'examples/quickstart.mjs',
+                                 'aster/study/planner.mjs', 'aster/storage/backup.mjs', 'tests/planner.test.mjs']:
+                    self.assertIn(prefix + required, names)
+                self.assertNotIn(prefix + 'tests/metadata.browser.test.mjs', names)
+                manifest = json.loads(bundle.read(prefix + 'package.json'))
+                self.assertEqual(manifest['version'], '9.9.9')
+                for test in manifest['scripts']['test'].split()[2:]:
+                    self.assertIn(prefix + test, names)
+                # Every relative import inside the zip must resolve inside the zip.
+                for name in names:
+                    if not name.endswith('.mjs'):
+                        continue
+                    for target in re.findall(r"from '(\.{1,2}/[^']+)'", bundle.read(name).decode()):
+                        resolved = (Path(name).parent / target).as_posix()
+                        parts = []
+                        for part in resolved.split('/'):
+                            if part == '..': parts.pop()
+                            elif part != '.': parts.append(part)
+                        self.assertIn('/'.join(parts), names, f'{name} imports {target}')
 
 if __name__ == '__main__': unittest.main()

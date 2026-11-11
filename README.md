@@ -4,6 +4,21 @@ Aster is a temporary name for an open-source productivity and research browser b
 
 **Current delivery: a tested foundation and an uncompiled native Chromium overlay. A runnable Aster browser, macOS app/DMG and Windows executable/installer have not been built.** The available Linux environment cannot fit a Chromium checkout and build. See [validation and limits](docs/STATUS.md) and [measured resources](docs/ENVIRONMENT.md).
 
+## Download
+
+Get the latest version from the **[Releases page](https://github.com/Sumi1124/browser/releases/latest)**:
+
+- **`aster-modules-<version>.zip`**: the study and research tools (planner, flashcards, research library, citations, data analysis, charts and backups) with a demo and tests. Unzip it, then run `node examples/quickstart.mjs` (needs [Node.js](https://nodejs.org/) 22+). The README inside explains everything.
+- **`aster-source-<commit>.zip`**: the complete source code.
+
+No installable browser app exists yet; see below.
+
+Developers can also run the demo straight from a clone:
+
+```sh
+npm run example   # writes planner.ics, chart.svg, bibliography files and a backup to ./aster-example-output
+```
+
 ## Implemented
 
 - Standalone C++20 library: six search providers, safe custom HTTPS templates, Unicode query encoding, synchronized/independent searches, pane identities, swapping, closing, resizing and 2/3/4-pane geometry.
