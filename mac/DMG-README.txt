@@ -28,6 +28,10 @@ USING ASTER
 - Option-Cmd-S shows or hides the Study Tools sidebar.
 - Option-Cmd-C cites the page you are reading.
 - Option-Cmd-F opens Split Search: one search, two engines side by side.
+- Cmd-D bookmarks the page (or removes the bookmark). The Bookmarks menu
+  lists your bookmarks; Option-Cmd-B opens them in the sidebar, where you
+  can sort them into folders and import bookmarks from Safari or Chrome.
+- Cmd-F finds text on the page; Cmd-G and Shift-Cmd-G move between matches.
 - The Workspaces menu opens separate windows for Personal, Business,
   IB MYP, IB Diploma Programme and Research. Each workspace keeps its own
   website logins and cookies.

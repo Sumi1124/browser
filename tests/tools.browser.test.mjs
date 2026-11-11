@@ -48,6 +48,7 @@ const bridgeScript = () => {
       case 'openFile': return window.__nextFile;
       case 'citeCurrentPage': if (!window.__citation) throw new Error('Open a web page first.'); return window.__citation;
       case 'openURL': window.__opened.push(message.url); return true;
+      case 'currentPage': return {url: 'https://www.desmos.com/calculator#graph', title: 'Desmos | Graphing Calculator'};
       default: throw new Error(`Unknown op ${message.op}`);
     }
   }}}};
@@ -124,6 +125,32 @@ test('study tools panel works end to end with the native bridge', async () => {
     await page.click('#library li button.link[title^="https://example.org"]');
     assert.deepEqual(await page.evaluate(() => window.__opened), ['https://example.org/rail?utm_source=x']);
 
+    // Bookmarks: bookmark the current page, detect a duplicate, use folders, export and import.
+    await page.click('.tabs button[data-view="bookmarks"]');
+    await page.click('#bookmarks button:has-text("Bookmark current page")');
+    await page.waitForSelector('#bookmarks li:has-text("Desmos | Graphing Calculator")');
+    await page.click('#bookmarks button:has-text("Bookmark current page")');
+    await page.waitForSelector('#toast:has-text("already bookmarked")');
+    await page.fill('#bookmarks input[placeholder="New folder name"]', 'Maths');
+    await page.click('#bookmarks button:has-text("Add folder")');
+    await page.click('#bookmarks button:has-text("Edit")');
+    await page.selectOption('#bookmarks label:has-text("Folder") select', {label: 'Maths'});
+    await page.fill('#bookmarks label:has-text("Name") input', 'Desmos');
+    await page.click('#bookmarks button:has-text("Save")');
+    await page.waitForSelector('#bookmarks li:has-text("Desmos") .meta:has-text("www.desmos.com · Maths")');
+    await page.click('#bookmarks button:has-text("Export…")');
+    const exported = await page.evaluate(() => window.__saved.at(-1));
+    assert.equal(exported.name, 'Aster Bookmarks.html');
+    assert.match(exported.text, /<H3>Maths<\/H3>[\s\S]*HREF="https:\/\/www\.desmos\.com\/calculator#graph"/);
+    await page.evaluate(() => { window.__nextFile = {name: 'chrome.html', text: '<DL><p><DT><H3>Science</H3><DL><p><DT><A HREF="https://phet.colorado.edu/">PhET</A><DT><A HREF="javascript:x">Bad</A></DL><p><DT><A HREF="https://www.desmos.com/calculator">Dup</A></DL>'}; });
+    await page.click('#bookmarks button:has-text("Import…")');
+    await page.waitForSelector('#toast:has-text("Imported 1 bookmark(s), 1 already saved, 1 skipped")');
+    await page.fill('#bookmarks input[type=search]', 'phet');
+    assert.equal(await page.locator('#bookmarks li').count(), 1);
+    const storedMarks = JSON.parse(await page.evaluate(() => window.__store.bookmarks));
+    assert.equal(storedMarks.bookmarks.length, 2);
+    assert.deepEqual(storedMarks.folders.map(folder => folder.name).sort(), ['Maths', 'Science']);
+
     // Data: open a CSV, see statistics, draw a scatter chart with a trend line.
     await page.evaluate(() => { window.__nextFile = {name: 'rates.csv', text: 'temp,rate\n10,2.1\n20,3.9\n30,6.2\n40,7.8\n50,10.1\n'}; });
     await page.click('.tabs button[data-view="data"]');
@@ -147,9 +174,9 @@ test('study tools panel works end to end with the native bridge', async () => {
     await page.evaluate(text => { window.__nextFile = {name: 'backup.json', text}; }, backup.text);
     await page.click('.tabs button[data-view="backup"]');
     await page.click('#backup button:has-text("Restore from backup")');
-    await page.waitForSelector('#backup p:has-text("1 sources, 1 tasks, 1 cards")');
+    await page.waitForSelector('#backup p:has-text("1 sources, 1 tasks, 1 cards, 2 bookmarks")');
     await page.click('#backup button:has-text("Replace my data")');
-    await page.waitForFunction(() => window.__store.library && window.__store.planner && window.__store.flashcards);
+    await page.waitForFunction(() => window.__store.library && window.__store.planner && window.__store.flashcards && window.__store.bookmarks);
 
     // Corrupt stored data locks that module instead of overwriting it.
     await page.evaluate(() => { window.__store.planner = '{"schema":1,"tasks":[{"id":"bad"}]}'; });
@@ -162,7 +189,7 @@ test('study tools panel works end to end with the native bridge', async () => {
     assert.equal(await page.evaluate(() => window.__store.planner), '{"schema":1,"tasks":[{"id":"bad"}]}');
 
     assert.deepEqual(await page.evaluate(() => window.asterTools.selfTest().then(result => result.checks)),
-      ['sha256', 'ics', 'chart', 'backup', 'storage', 'ui']);
+      ['sha256', 'ics', 'chart', 'backup', 'storage', 'bookmarks', 'ui']);
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

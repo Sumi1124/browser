@@ -8,13 +8,13 @@ This download contains the working logic behind Aster's study and research tools
 
 | Folder or file | What it does |
 | --- | --- |
-| `aster/research/` | Citation extraction from web pages; a research library with folders, tags, notes and duplicate detection; bibliography export (BibTeX, RIS, CSL-JSON) |
+| `aster/research/` | Citation extraction from web pages; a research library with folders, tags, notes and duplicate detection; bibliography export (BibTeX, RIS, CSL-JSON); bookmarks with folders and Safari/Chrome bookmark-file import and export |
 | `aster/study/` | A planner with recurring tasks, an upcoming/overdue list and calendar (`.ics`) export; flashcards with spaced repetition (SM-2) |
 | `aster/data/` | CSV/TSV/JSON import, column types, cleaning, statistics (mean, median, standard deviation, quartiles) and linear regression; SVG charts and safe CSV export |
 | `aster/ai/` | Privacy rules for future AI features: shows exactly what would be sent, hides emails and keys, and asks for consent each time. **No AI service is contacted.** |
 | `aster/storage/` | Backups with version numbers and a checksum, upgrades from older backups, and a plan for which old backups to keep |
 | `examples/quickstart.mjs` | A demo that uses every module and writes example files |
-| `tests/` | The automated tests (33 of them) |
+| `tests/` | The automated tests (38 of them) |
 | `API.md` | Full reference for every function |
 | `LICENSE` | BSD-3-Clause |
 

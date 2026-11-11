@@ -3,6 +3,7 @@
 // the app bundle (aster://app/). All page text is inserted with textContent,
 // never innerHTML. Storage and file dialogs go through the native bridge.
 import {ResearchLibrary, mergeMissingFields} from './aster/research/library.mjs';
+import {BookmarkCollection} from './aster/research/bookmarks.mjs';
 import {Planner, toIcs, CATEGORIES, PRIORITIES} from './aster/study/planner.mjs';
 import {FlashcardCollection} from './aster/study/flashcards.mjs';
 import {parseDelimited, parseJsonRecords, inferColumns, numericColumn, describe, linearRegression} from './aster/data/dataset.mjs';
@@ -57,9 +58,10 @@ function toast(message, {error = false} = {}) {
 const showError = error => toast(error?.message || String(error), {error: true});
 
 // ---- State and persistence -------------------------------------------------
-const codecs = {library: ResearchLibrary, planner: Planner, flashcards: FlashcardCollection};
+const codecs = {library: ResearchLibrary, planner: Planner, flashcards: FlashcardCollection, bookmarks: BookmarkCollection};
 const state = {
-  library: new ResearchLibrary(), planner: new Planner(), flashcards: new FlashcardCollection(),
+  library: new ResearchLibrary(), planner: new Planner(), flashcards: new FlashcardCollection(), bookmarks: new BookmarkCollection(),
+  editBookmark: null,
   locked: new Set(), appVersion: '0.0.0',
   study: null, review: null, expanded: new Set(), selected: new Set(), filters: {},
   dataset: null, chart: null, pendingRestore: null,
@@ -457,17 +459,118 @@ function renderData(root) {
   root.append(h('div', {class: 'row'}, h('button', {text: 'Export as CSV…', onclick: () => bridge.call('saveFile', {suggestedName: 'data.csv', text: tableToCsv(table)}).then(saved => saved && toast('CSV saved.')).catch(showError)})));
 }
 
+// ---- Bookmarks -----------------------------------------------------------------
+async function bookmarkCurrentPage() {
+  try {
+    const page = await bridge.call('currentPage');
+    await change('bookmarks', () => {
+      const result = state.bookmarks.add({id: shortId(), url: page.url, title: page.title, addedAt: nowIso()});
+      toast(result.added ? 'Bookmarked.' : 'This page is already bookmarked.');
+    });
+  } catch (error) { showError(error); }
+}
+
+function folderName(id) {
+  return state.bookmarks.folders.find(folder => folder.id === id)?.name || '';
+}
+
+function renderBookmarkEditor(root) {
+  const bookmark = state.bookmarks.get(state.editBookmark);
+  if (!bookmark) { state.editBookmark = null; return; }
+  const title = h('input', {value: bookmark.title});
+  const url = h('input', {value: bookmark.url});
+  const folder = select([['', 'Unfiled'], ...state.bookmarks.folders.map(item => [item.id, item.name])], bookmark.folderId || '');
+  root.append(h('div', {class: 'card'}, h('strong', {text: 'Edit bookmark'}),
+    field('Name', title), field('Address', url), field('Folder', folder),
+    h('div', {class: 'row'},
+      h('button', {class: 'primary', text: 'Save', onclick: () => change('bookmarks', () => {
+        state.bookmarks.update(bookmark.id, {title: title.value, url: url.value, folderId: folder.value || null});
+        state.editBookmark = null;
+      })}),
+      h('button', {text: 'Cancel', onclick: () => { state.editBookmark = null; render('bookmarks'); }}))));
+}
+
+function renderBookmarks(root) {
+  const f = state.filters;
+  const folders = state.bookmarks.folders;
+  if (f.bmFolder && f.bmFolder !== '*' && !folders.some(folder => folder.id === f.bmFolder)) f.bmFolder = '*';
+  root.append(h('div', {class: 'row'}, h('button', {class: 'primary', text: 'Bookmark current page', onclick: bookmarkCurrentPage}),
+    h('span', {class: 'note', text: 'or press ⌘D'})));
+  if (state.editBookmark) renderBookmarkEditor(root);
+
+  const folderSelect = select([['*', 'All bookmarks'], ['', 'Unfiled'], ...folders.map(folder => [folder.id, folder.name])], f.bmFolder ?? '*');
+  folderSelect.addEventListener('change', () => { f.bmFolder = folderSelect.value; render('bookmarks'); });
+  const search = h('input', {type: 'search', placeholder: 'Search bookmarks', value: f.bmText || ''});
+  search.addEventListener('input', () => { f.bmText = search.value; renderBookmarkList(); });
+  const newFolder = h('input', {placeholder: 'New folder name'});
+  const selected = f.bmFolder && f.bmFolder !== '*' ? folders.find(folder => folder.id === f.bmFolder) : null;
+  root.append(h('div', {class: 'card'},
+    h('div', {class: 'row'}, h('div', {class: 'grow'}, folderSelect)),
+    h('div', {class: 'row'}, h('div', {class: 'grow'}, search)),
+    selected ? h('div', {class: 'row'},
+      h('button', {class: 'link', text: 'Rename folder', onclick: () => {
+        const name = prompt('Folder name', selected.name);
+        if (name !== null) change('bookmarks', () => state.bookmarks.renameFolder(selected.id, name));
+      }}),
+      h('button', {class: 'link danger', text: 'Delete folder', onclick: () => {
+        if (confirm(`Delete the folder "${selected.name}"? Its bookmarks are kept as unfiled.`)) {
+          change('bookmarks', () => { state.bookmarks.removeFolder(selected.id); f.bmFolder = '*'; });
+        }
+      }})) : null,
+    h('div', {class: 'row'}, h('div', {class: 'grow'}, newFolder), h('button', {text: 'Add folder', onclick: () => {
+      if (newFolder.value.trim()) change('bookmarks', () => { state.bookmarks.addFolder({id: shortId(), name: newFolder.value}); toast('Folder added. Use Edit on a bookmark to move it there.'); });
+    }}))));
+
+  const listCard = h('div', {class: 'card', id: 'bookmark-list'});
+  root.append(listCard);
+  function renderBookmarkList() {
+    const query = {};
+    if (f.bmFolder !== undefined && f.bmFolder !== '*') query.folderId = f.bmFolder || null;
+    if (f.bmText) query.text = f.bmText;
+    const items = state.bookmarks.list(query).reverse();
+    listCard.replaceChildren(items.length ? h('ul', {class: 'items'}, items.map(bookmark => {
+      let host = '';
+      try { host = new URL(bookmark.url).hostname; } catch { /* stored URLs are validated */ }
+      return h('li', {},
+        h('div', {class: 'body'},
+          h('button', {class: 'link', text: bookmark.title, title: bookmark.url, onclick: () => bridge.call('openURL', {url: bookmark.url}).catch(showError)}),
+          h('div', {class: 'meta', text: [host, bookmark.folderId && folderName(bookmark.folderId)].filter(Boolean).join(' · ')}),
+          h('div', {class: 'row'},
+            h('button', {class: 'link', text: 'Edit', onclick: () => { state.editBookmark = bookmark.id; render('bookmarks'); window.scrollTo(0, 0); }}),
+            h('button', {class: 'link danger', text: 'Delete', onclick: () => change('bookmarks', () => state.bookmarks.remove(bookmark.id))}))));
+    })) : h('p', {class: 'empty', text: state.bookmarks.size ? 'No bookmarks match.' : 'No bookmarks yet. Press ⌘D on any page.'}));
+  }
+  renderBookmarkList();
+
+  root.append(h('h2', {text: 'Import and export'}), h('div', {class: 'card'},
+    h('p', {class: 'note', text: 'Uses the standard bookmarks file (.html) that Safari, Chrome, Firefox and Edge can export and import.'}),
+    h('div', {class: 'row'},
+      h('button', {text: 'Import…', onclick: async () => {
+        try {
+          const file = await bridge.call('openFile', {types: ['html', 'htm']});
+          if (!file) return;
+          const result = await change('bookmarks', () => state.bookmarks.importNetscapeHtml(file.text, {makeId: shortId, now: nowIso()}));
+          if (result) toast(`Imported ${result.added} bookmark(s)${result.duplicates ? `, ${result.duplicates} already saved` : ''}${result.skipped ? `, ${result.skipped} skipped (not web pages)` : ''}.`);
+        } catch (error) { showError(error); }
+      }}),
+      h('button', {text: 'Export…', disabled: !state.bookmarks.size, onclick: async () => {
+        try {
+          if (await bridge.call('saveFile', {suggestedName: 'Aster Bookmarks.html', text: state.bookmarks.toNetscapeHtml()})) toast('Bookmarks exported.');
+        } catch (error) { showError(error); }
+      }}))));
+}
+
 // ---- Backup --------------------------------------------------------------------
 function renderBackup(root) {
-  const counts = `${state.library.size} sources, ${state.planner.tasks.length} tasks, ${state.flashcards.toJSON().cards.length} cards`;
+  const counts = `${state.library.size} sources, ${state.planner.tasks.length} tasks, ${state.flashcards.toJSON().cards.length} cards, ${state.bookmarks.size} bookmarks`;
   if (state.locked.size) root.append(h('div', {class: 'warn', text: `Locked because it could not be read: ${[...state.locked].join(', ')}. Restore a backup to fix this.`}));
   root.append(h('div', {class: 'card'},
-    h('p', {text: `Save a copy of your library, planner and flashcards (${counts}) to a file you choose.`}),
+    h('p', {text: `Save a copy of your library, planner, flashcards and bookmarks (${counts}) to a file you choose.`}),
     h('p', {class: 'note', text: 'Backups are checked for damage when restored. They are not encrypted, so keep them somewhere private.'}),
     h('button', {class: 'primary', text: 'Back up now…', onclick: async () => {
       try {
         const createdAt = nowIso();
-        const text = await createBackup({modules: {library: state.library, planner: state.planner, flashcards: state.flashcards}, createdAt, appVersion: state.appVersion, label: 'Aster for Mac'});
+        const text = await createBackup({modules: {library: state.library, planner: state.planner, flashcards: state.flashcards, bookmarks: state.bookmarks}, createdAt, appVersion: state.appVersion, label: 'Aster for Mac'});
         if (await bridge.call('saveFile', {suggestedName: backupFileName(createdAt), text})) toast('Backup saved.');
       } catch (error) { showError(error); }
     }})));
@@ -477,9 +580,9 @@ function renderBackup(root) {
     const restore = state.pendingRestore;
     const m = restore.modules;
     root.append(h('div', {class: 'card'},
-      h('p', {text: `Backup from ${new Date(restore.createdAt).toLocaleString()}: ${m.library?.size ?? 0} sources, ${m.planner?.tasks.length ?? 0} tasks, ${m.flashcards?.toJSON().cards.length ?? 0} cards.`}),
+      h('p', {text: `Backup from ${new Date(restore.createdAt).toLocaleString()}: ${m.library?.size ?? 0} sources, ${m.planner?.tasks.length ?? 0} tasks, ${m.flashcards?.toJSON().cards.length ?? 0} cards, ${m.bookmarks?.size ?? 0} bookmarks.`}),
       restore.warnings.map(text => h('div', {class: 'warn', text})),
-      h('div', {class: 'warn', text: 'Restoring replaces your current library, planner and flashcards.'}),
+      h('div', {class: 'warn', text: 'Restoring replaces your current library, planner, flashcards and bookmarks (whatever the backup contains).'}),
       h('div', {class: 'row'},
         h('button', {class: 'primary', text: 'Replace my data', onclick: async () => {
           try {
@@ -509,7 +612,7 @@ function renderBackup(root) {
 }
 
 // ---- Views ---------------------------------------------------------------------
-const renderers = {planner: renderPlanner, cards: renderCards, library: renderLibrary, data: renderData, backup: renderBackup};
+const renderers = {planner: renderPlanner, cards: renderCards, library: renderLibrary, bookmarks: renderBookmarks, data: renderData, backup: renderBackup};
 function render(view) {
   const root = document.getElementById(view);
   root.replaceChildren();
@@ -538,7 +641,11 @@ async function selfTest() {
   check('backup', (await readBackup(text)).modules.planner.tasks.length === 1);
   await bridge.call('save', {key: 'self-test', text: 'ok ✓'});
   check('storage', await bridge.call('load', {key: 'self-test'}) === 'ok ✓');
-  check('ui', document.querySelectorAll('.tabs button').length === 5);
+  const marks = new BookmarkCollection();
+  marks.add({id: 'b', url: 'https://example.org/', title: 'Example', addedAt: '2026-11-11T00:00:00Z'});
+  const copy = new BookmarkCollection();
+  check('bookmarks', copy.importNetscapeHtml(marks.toNetscapeHtml(), {makeId: shortId}).added === 1);
+  check('ui', document.querySelectorAll('.tabs button').length === Object.keys(renderers).length);
   return {ok: true, checks: checks.map(item => item.name)};
 }
 

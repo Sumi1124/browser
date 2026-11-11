@@ -77,3 +77,52 @@ final class FileNameTests: XCTestCase {
         XCTAssertEqual(FileNames.unique("a.pdf", in: dir).lastPathComponent, "a 2.pdf")
     }
 }
+
+final class BookmarkFileTests: XCTestCase {
+    private func makeStore() -> (ToolsStore, URL) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        return (ToolsStore(directory: dir), dir)
+    }
+
+    func testKeysMatchTheJavaScriptRule() {
+        XCTAssertEqual(BookmarkFile.key(URL(string: "https://Example.org/")!), "https://example.org")
+        XCTAssertEqual(BookmarkFile.key(URL(string: "https://example.org/a/#top")!), "https://example.org/a")
+        XCTAssertNotEqual(BookmarkFile.key(URL(string: "https://example.org/a?x=1")!), BookmarkFile.key(URL(string: "https://example.org/a?x=2")!))
+        XCTAssertNil(BookmarkFile.key(URL(string: "javascript:alert(1)")!))
+        XCTAssertNil(BookmarkFile.key(URL(string: "file:///etc/passwd")!))
+        XCTAssertNil(BookmarkFile.key(URL(string: "https://user:pw@example.org/")!))
+    }
+
+    func testAddContainsRemoveAndPreservation() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // A file written by the study-tools page, with a folder and an extra field.
+        try store.save("bookmarks", text: #"{"schema":1,"folders":[{"id":"f","name":"Maths"}],"bookmarks":[{"id":"a","url":"https://www.desmos.com/calculator","title":"Desmos","folderId":"f","addedAt":"2026-11-11T10:00:00Z","note":"keep me"}]}"#)
+        let file = BookmarkFile(store: store)
+        XCTAssertTrue(file.contains(URL(string: "https://www.desmos.com/calculator/#x")!))
+        XCTAssertTrue(try file.add(url: URL(string: "https://ibo.org")!, title: "  International\n Baccalaureate ", now: Date(timeIntervalSince1970: 0)))
+        XCTAssertFalse(try file.add(url: URL(string: "https://ibo.org/")!, title: "Again"))
+        XCTAssertThrowsError(try file.add(url: URL(string: "javascript:alert(1)")!, title: "x"))
+        let contents = try file.read()
+        XCTAssertEqual(contents.folders, [BookmarkFile.Folder(id: "f", name: "Maths")])
+        XCTAssertEqual(contents.bookmarks.map(\.title), ["Desmos", "International Baccalaureate"])
+        let saved = try XCTUnwrap(store.load("bookmarks"))
+        XCTAssertTrue(saved.contains("\"note\":\"keep me\""))
+        XCTAssertTrue(saved.contains("\"addedAt\":\"1970-01-01T00:00:00Z\""))
+        XCTAssertTrue(try file.remove(url: URL(string: "https://ibo.org")!))
+        XCTAssertFalse(file.contains(URL(string: "https://ibo.org")!))
+        XCTAssertFalse(try file.remove(url: URL(string: "https://ibo.org")!))
+    }
+
+    func testUnreadableFileIsNeverOverwritten() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save("bookmarks", text: "{not json")
+        let file = BookmarkFile(store: store)
+        XCTAssertThrowsError(try file.add(url: URL(string: "https://example.org")!, title: "x")) { error in
+            XCTAssertEqual(error as? BookmarkError, .unreadable)
+        }
+        XCTAssertEqual(try store.load("bookmarks"), "{not json")
+        XCTAssertFalse(file.contains(URL(string: "https://example.org")!))
+    }
+}

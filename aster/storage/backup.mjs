@@ -7,11 +7,12 @@ import {isPlainObject, assertInstant, canonicalJson, sha256Hex, parseJsonBounded
 import {ResearchLibrary} from '../research/library.mjs';
 import {Planner} from '../study/planner.mjs';
 import {FlashcardCollection} from '../study/flashcards.mjs';
+import {BookmarkCollection} from '../research/bookmarks.mjs';
 
 export const BACKUP_FORMAT = 'aster-backup';
 export const BACKUP_VERSION = 1;
 export const BACKUP_LIMITS = Object.freeze({bytes: 64 * 1024 * 1024, modules: 32});
-export const DEFAULT_CODECS = Object.freeze({library: ResearchLibrary, planner: Planner, flashcards: FlashcardCollection});
+export const DEFAULT_CODECS = Object.freeze({library: ResearchLibrary, planner: Planner, flashcards: FlashcardCollection, bookmarks: BookmarkCollection});
 const MODULE_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 
 const body = envelope => ({format: envelope.format, version: envelope.version, createdAt: envelope.createdAt,
