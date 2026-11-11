@@ -204,10 +204,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
             let item = NSToolbarItem(itemIdentifier: identifier)
             let button = NSButton(title: context.name, target: self, action: #selector(showWorkspaceMenu(_:)))
             button.bezelStyle = .texturedRounded
+            // Palette colours survive the toolbar's own tinting of template images.
+            let symbol = NSImage.SymbolConfiguration(pointSize: context.isPrivate ? 11 : 7, weight: .regular)
+                .applying(.init(paletteColors: [context.isPrivate ? .secondaryLabelColor : .asterAccent]))
             button.image = NSImage(systemSymbolName: context.isPrivate ? "eye.slash" : "circle.fill", accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: context.isPrivate ? 11 : 7, weight: .regular))
+                .withSymbolConfiguration(symbol)
             button.imagePosition = .imageLeading
-            button.contentTintColor = context.isPrivate ? .secondaryLabelColor : .asterAccent
             button.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
             button.toolTip = context.isPrivate ? "Private window" : "Workspace: \(context.name). Click to open another workspace."
             button.setAccessibilityLabel("Workspace: \(context.name)")

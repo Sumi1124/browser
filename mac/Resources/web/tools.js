@@ -549,12 +549,14 @@ function renderBookmarkEditor(root) {
 
 const MONOGRAM_COLORS = [['var(--good-soft)', 'var(--good)'], ['var(--blue-soft)', 'var(--blue)'], ['var(--accent-soft)', 'var(--accent-strong)'],
   ['var(--amber-soft)', 'var(--amber)'], ['var(--danger-soft)', 'var(--danger)'], ['var(--segment)', 'var(--text)']];
-function monogram(text) {
-  const label = text.replace(/^www\./, '');
+// Letter from the bookmark's name ("Wikipedia" → W), colour from its address.
+function monogram(name, host) {
+  const label = (host || name).replace(/^www\./, '');
   let hash = 0;
   for (const char of label) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
   const [bg, fg] = MONOGRAM_COLORS[hash % MONOGRAM_COLORS.length];
-  return h('span', {class: 'monogram', 'aria-hidden': 'true', style: `background: ${bg}; color: ${fg}`, text: (label[0] || '?').toUpperCase()});
+  const letter = [...name].find(char => /[\p{L}\p{N}]/u.test(char)) || label[0] || '?';
+  return h('span', {class: 'monogram', 'aria-hidden': 'true', style: `background: ${bg}; color: ${fg}`, text: letter.toUpperCase()});
 }
 
 function renderBookmarks(root) {
@@ -599,7 +601,7 @@ function renderBookmarks(root) {
     listCard.replaceChildren(items.length ? h('ul', {class: 'items'}, items.map(bookmark => {
       let host = '';
       try { host = new URL(bookmark.url).hostname; } catch { /* stored URLs are validated */ }
-      return h('li', {}, monogram(host || bookmark.title),
+      return h('li', {}, monogram(bookmark.title, host),
         h('div', {class: 'body'},
           h('button', {class: 'link title', text: bookmark.title, title: bookmark.url, onclick: () => bridge.call('openURL', {url: bookmark.url}).catch(showError)}),
           h('div', {class: 'meta', text: [host, bookmark.folderId && folderName(bookmark.folderId)].filter(Boolean).join(' · ')}),

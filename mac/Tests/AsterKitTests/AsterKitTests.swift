@@ -149,3 +149,12 @@ final class StartPageTests: XCTestCase {
         XCTAssertTrue(empty.contains("Private window"))
     }
 }
+
+final class MonogramTests: XCTestCase {
+    func testLetterComesFromTheName() {
+        let wiki = BookmarkFile.Bookmark(id: "w", title: "Industrial Revolution", url: URL(string: "https://en.wikipedia.org/wiki/Industrial_Revolution")!, folderId: nil)
+        XCTAssertEqual(StartPage.monogram(for: wiki).letter, "I")
+        let quoted = BookmarkFile.Bookmark(id: "q", title: "“PhET” sims", url: URL(string: "https://phet.colorado.edu")!, folderId: nil)
+        XCTAssertEqual(StartPage.monogram(for: quoted).letter, "P")
+    }
+}

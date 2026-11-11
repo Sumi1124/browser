@@ -390,12 +390,15 @@ public enum StartPage {
                                   ("#fdf0dc", "#8a5200"), ("#fbe9e7", "#a8322a"), ("#f0f0f3", "#3a3a40")]
 
     static func monogram(for bookmark: BookmarkFile.Bookmark) -> (letter: String, background: String, foreground: String) {
-        var label = bookmark.url.host ?? bookmark.title
-        if label.hasPrefix("www.") { label.removeFirst(4) }
+        // The bookmark's own name gives the letter ("Wikipedia" → W), not
+        // its address ("en.wikipedia.org" → E); the address picks the colour.
+        var host = bookmark.url.host ?? bookmark.title
+        if host.hasPrefix("www.") { host.removeFirst(4) }
         var hash: UInt32 = 0
-        for scalar in label.unicodeScalars { hash = hash &* 31 &+ scalar.value }
+        for scalar in host.unicodeScalars { hash = hash &* 31 &+ scalar.value }
         let colors = palette[Int(hash % UInt32(palette.count))]
-        return (label.first.map { String($0).uppercased() } ?? "?", colors.0, colors.1)
+        let letter = bookmark.title.first(where: { $0.isLetter || $0.isNumber }) ?? host.first ?? "?"
+        return (String(letter).uppercased(), colors.0, colors.1)
     }
 
     public static func html(workspace: String, isPrivate: Bool, provider: SearchProvider, bookmarks: [BookmarkFile.Bookmark]) -> String {
