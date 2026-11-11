@@ -355,3 +355,99 @@ public final class BookmarkFile {
         return true
     }
 }
+
+// MARK: - Start page
+
+/// The page new tabs open on: a search box for the chosen engine and the
+/// user's bookmarks as tiles. Static HTML with no scripts; every bookmark
+/// title and address is escaped.
+public enum StartPage {
+    public static func escape(_ text: String) -> String {
+        var result = ""
+        result.reserveCapacity(text.count)
+        for char in text {
+            switch char {
+            case "&": result += "&amp;"
+            case "<": result += "&lt;"
+            case ">": result += "&gt;"
+            case "\"": result += "&quot;"
+            case "'": result += "&#39;"
+            default: result.append(char)
+            }
+        }
+        return result
+    }
+
+    /// The form action and field name for a provider's `…?q={query}` template.
+    public static func searchForm(for provider: SearchProvider) -> (action: String, field: String)? {
+        guard let components = URLComponents(string: provider.template),
+              let field = components.queryItems?.first(where: { $0.value == "{query}" })?.name,
+              components.scheme == "https", let host = components.host else { return nil }
+        return ("https://\(host)\(components.path)", field)
+    }
+
+    private static let palette = [("#e3f0e8", "#1f6b3d"), ("#e6eefb", "#23509c"), ("#eeeafc", "#5b45c2"),
+                                  ("#fdf0dc", "#8a5200"), ("#fbe9e7", "#a8322a"), ("#f0f0f3", "#3a3a40")]
+
+    static func monogram(for bookmark: BookmarkFile.Bookmark) -> (letter: String, background: String, foreground: String) {
+        var label = bookmark.url.host ?? bookmark.title
+        if label.hasPrefix("www.") { label.removeFirst(4) }
+        var hash: UInt32 = 0
+        for scalar in label.unicodeScalars { hash = hash &* 31 &+ scalar.value }
+        let colors = palette[Int(hash % UInt32(palette.count))]
+        return (label.first.map { String($0).uppercased() } ?? "?", colors.0, colors.1)
+    }
+
+    public static func html(workspace: String, isPrivate: Bool, provider: SearchProvider, bookmarks: [BookmarkFile.Bookmark]) -> String {
+        let form = searchForm(for: provider) ?? searchForm(for: .fallback)!
+        let tiles = bookmarks.prefix(12).map { bookmark -> String in
+            let mark = monogram(for: bookmark)
+            return """
+            <a class="tile" href="\(escape(bookmark.url.absoluteString))" title="\(escape(bookmark.url.absoluteString))"><span class="mono" style="background:\(mark.background);color:\(mark.foreground)">\(escape(mark.letter))</span><span class="name">\(escape(bookmark.title))</span></a>
+            """
+        }.joined()
+        let bookmarkSection = tiles.isEmpty
+            ? #"<p class="hint">Press ⌘D on any page to bookmark it. Your bookmarks will appear here.</p>"#
+            : #"<h2>Bookmarks</h2><nav class="tiles" aria-label="Bookmarks">\#(tiles)</nav>"#
+        let subtitle = isPrivate ? "Private window: pages you visit here aren't saved." : "\(escape(workspace)) workspace"
+        return """
+        <!doctype html>
+        <html lang="en"><head><meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action https:; base-uri 'none'">
+        <meta name="color-scheme" content="light dark">
+        <title>New Tab</title>
+        <style>
+        :root{--bg:#fbfbfd;--surface:#fff;--text:#1d1d1f;--muted:#6e6e73;--line:#e3e1ea;--accent:#6e56cf}
+        @media (prefers-color-scheme: dark){:root{--bg:#1c1b21;--surface:#2b2a31;--text:#f2f2f7;--muted:#a1a1a8;--line:#3a3942;--accent:#8b76e8}}
+        \(isPrivate ? ":root{--bg:#18171d;--surface:#26252c;--text:#f2f2f7;--muted:#a1a1a8;--line:#36353d;--accent:#8b76e8}" : "")
+        *{box-sizing:border-box}
+        body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12vh 24px 48px;gap:36px}
+        header{display:flex;flex-direction:column;align-items:center;gap:12px}
+        header p{margin:0;color:var(--muted);font-size:13px}
+        form{width:100%;max-width:560px;display:flex;align-items:center;gap:10px;height:52px;padding:0 8px 0 18px;border-radius:14px;background:var(--surface);box-shadow:0 1px 3px rgba(20,16,40,.08),0 0 0 1px var(--line)}
+        form:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 45%,transparent)}
+        input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font:inherit;font-size:16px;outline:none}
+        button{height:36px;padding:0 16px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+        section{width:100%;max-width:720px}
+        h2{margin:0 0 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+        .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+        .tile{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;border-radius:12px;color:var(--text);text-decoration:none}
+        .tile:hover,.tile:focus-visible{background:var(--surface);box-shadow:0 0 0 1px var(--line);outline:none}
+        .mono{width:52px;height:52px;border-radius:12px;display:grid;place-items:center;font-size:20px;font-weight:700}
+        .name{font-size:12px;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .hint{color:var(--muted);text-align:center;font-size:13px}
+        </style></head>
+        <body>
+        <header>
+        <svg width="56" height="56" viewBox="0 0 64 64" role="img" aria-label="Aster"><rect width="64" height="64" rx="15" fill="#6e56cf"/><g fill="#fff"><ellipse cx="32" cy="17" rx="4.5" ry="10"/><ellipse cx="32" cy="47" rx="4.5" ry="10"/><ellipse cx="17" cy="32" rx="10" ry="4.5"/><ellipse cx="47" cy="32" rx="10" ry="4.5"/><ellipse cx="21.4" cy="21.4" rx="4.5" ry="10" transform="rotate(-45 21.4 21.4)"/><ellipse cx="42.6" cy="42.6" rx="4.5" ry="10" transform="rotate(-45 42.6 42.6)"/><ellipse cx="42.6" cy="21.4" rx="4.5" ry="10" transform="rotate(45 42.6 21.4)"/><ellipse cx="21.4" cy="42.6" rx="4.5" ry="10" transform="rotate(45 21.4 42.6)"/></g><circle cx="32" cy="32" r="7" fill="#f5b83d"/></svg>
+        <p>\(subtitle)</p>
+        </header>
+        <form action="\(escape(form.action))" method="get" role="search">
+        <input name="\(escape(form.field))" placeholder="Search with \(escape(provider.name))" aria-label="Search with \(escape(provider.name))" autocomplete="off">
+        <button type="submit">Search</button>
+        </form>
+        <section>\(bookmarkSection)</section>
+        </body></html>
+        """
+    }
+}

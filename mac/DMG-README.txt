@@ -20,11 +20,26 @@ Developer ID, so macOS asks you to confirm the first time:
 
 You only need to do this once.
 
+IF MACOS STILL WON'T OPEN IT
+If you see "Aster is damaged and can't be opened", or there is no
+"Open Anyway" button, macOS is blocking the download itself. After
+dragging Aster to Applications, open Terminal (Applications > Utilities)
+and paste this line, then press Return:
+
+    xattr -dr com.apple.quarantine /Applications/Aster.app
+
+It removes the "downloaded from the internet" flag from Aster only.
+Then open Aster normally.
+
 REQUIREMENTS
-macOS 14 Sonoma or newer, on an Apple silicon or Intel Mac.
+macOS 13 Ventura or newer, on an Apple silicon or Intel Mac.
+(On macOS 13, workspaces share website logins; separate logins per
+workspace need macOS 14 Sonoma or newer.)
 
 USING ASTER
-- Cmd-T new tab, Cmd-N new window, Shift-Cmd-N private window.
+- Cmd-T new tab (opens the Start page), Cmd-N new window,
+  Shift-Cmd-N private window, Shift-Cmd-T reopen the tab you just closed.
+- Cmd-P prints the page; Option-Cmd-L opens your Downloads folder.
 - Option-Cmd-S shows or hides the Study Tools sidebar.
 - Option-Cmd-C cites the page you are reading.
 - Option-Cmd-F opens Split Search: one search, two engines side by side.

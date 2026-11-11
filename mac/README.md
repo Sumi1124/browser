@@ -4,7 +4,7 @@ A native macOS browser built on **WebKit**, the engine already built into every 
 
 ## Download
 
-Get `Aster-<version>.dmg` from the [Releases page](https://github.com/Sumi1124/browser/releases/latest). It needs macOS 14 Sonoma or newer and runs natively on both Apple silicon and Intel Macs.
+Get `Aster-<version>.dmg` from the [Releases page](https://github.com/Sumi1124/browser/releases/latest). It needs macOS 13 Ventura or newer and runs natively on both Apple silicon and Intel Macs. Separate logins per workspace need macOS 14 Sonoma; on macOS 13, workspaces share them.
 
 The app is ad-hoc signed, not signed with a paid Apple Developer ID, so on first launch:
 
@@ -12,13 +12,15 @@ The app is ad-hoc signed, not signed with a paid Apple Developer ID, so on first
 2. Go to **System Settings → Privacy & Security** and click **Open Anyway** next to the Aster message.
 3. Confirm with your password or Touch ID.
 
+If macOS says Aster "is damaged", or there's no **Open Anyway** button, run `xattr -dr com.apple.quarantine /Applications/Aster.app` in Terminal. It removes the downloaded-from-the-internet flag from Aster only.
+
 ## Features
 
 | Feature | How |
 | --- | --- |
-| Tabs | Native macOS window tabs (⌘T, ⌘W, the **+** button, drag a tab out into its own window, View → Show All Tabs) |
+| Tabs | Native macOS window tabs (⌘T, ⌘W, the **+** button, drag a tab out into its own window, View → Show All Tabs). New tabs open on a **Start page** with a search box and your bookmarks. ⇧⌘T reopens the last closed tab. |
 | Address bar | Type a web address or a search (⌘L). Choose the search engine in **Aster → Search Engine**: Google, DuckDuckGo, Bing, Brave, Yahoo or Ecosia. |
-| Workspaces | **Workspaces** menu (⌃⌘1–5): Personal, Business, IB MYP, IB Diploma Programme, and Research and Data Analysis. Each workspace has its own cookies and logins, so being signed in under Business doesn't sign you in under Personal. Its tabs group together. |
+| Workspaces | The workspace button in the toolbar, or the **Workspaces** menu (⌃⌘1–5): Personal, Business, IB MYP, IB Diploma Programme, and Research and Data Analysis. Each workspace has its own cookies and logins, so being signed in under Business doesn't sign you in under Personal. Its tabs group together. |
 | Private windows | ⇧⌘N opens a dark window whose cookies and history are kept in memory only and thrown away when it closes. Study tools still work, but website data is never saved. |
 | Split Search | ⌥⌘F searches two engines at once, side by side or stacked, with a swap button |
 | Bookmarks | ⌘D or the ☆ button bookmarks the page; the star fills in for pages you've already saved, and clicking it again removes the bookmark. The **Bookmarks** menu lists them, with folders as submenus. **Bookmarks → Show All Bookmarks** (⌥⌘B) opens the Bookmarks tab in the sidebar to search, rename, change addresses, sort into folders, and import or export the standard bookmarks file that Safari, Chrome, Firefox and Edge use. |
@@ -27,7 +29,7 @@ The app is ad-hoc signed, not signed with a paid Apple Developer ID, so on first
 | Cite This Page | ⌥⌘C reads the page's citation details (title, authors, date, DOI…) into the Library for you to check. Anything missing is highlighted; nothing is guessed. |
 | Downloads | Saved to ~/Downloads and marked as downloaded from the internet, so macOS checks them before they open |
 | Default browser | **Aster → Set as Default Browser…** |
-| Also included | Zoom (⌘+ / ⌘- / ⌘0), back/forward swipe, ⌘-click to open in a new tab, pages can be inspected from Safari's Develop menu (Safari → Develop → your Mac → Aster) |
+| Also included | Print (⌘P), Show Downloads (⌥⌘L), full-screen video, middle-click to open in a new tab, zoom (⌘+ / ⌘- / ⌘0), back/forward swipe, ⌘-click to open in a new tab, pages can be inspected from Safari's Develop menu (Safari → Develop → your Mac → Aster) |
 
 Study-tools data is stored in `~/Library/Application Support/Aster/Study Tools/` as JSON files, written atomically, readable only by your user account, and never uploaded anywhere. If a file can't be read, Aster locks that tool instead of overwriting it, and you can restore a backup.
 

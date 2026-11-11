@@ -155,6 +155,16 @@ enum SelfTest {
         browser.findBar.close(nil)
         browser.window?.contentView?.layoutSubtreeIfNeeded()
         try check(browser.pane.webView.frame.minY == pageTop, "find bar closes and the page takes the space back")
+        try check(browser.pane.webView.configuration.preferences.isElementFullscreenEnabled, "video full screen is enabled")
         browser.window?.close()
+
+        // 5. New tabs open on the Start page: no scripts, searches the chosen engine.
+        let start = BrowserWindowController.open(context: .makePrivate())
+        try await waitUntil("the start page") { !start.pane.webView.isLoading && start.pane.webView.title == "New Tab" }
+        let startInfo = try await start.pane.webView.runJavaScript(
+            "return [document.scripts.length, document.querySelector('form').action, document.querySelector('form input').name].join('|');") as? String
+        let expected = StartPage.searchForm(for: AppDelegate.shared.searchProvider)!
+        try check(startInfo == "0|\(expected.action)|\(expected.field)", "start page has a script-free search form (\(startInfo ?? "-"))")
+        start.window?.close()
     }
 }

@@ -41,7 +41,17 @@ jobs:
       - name: Screenshot
         continue-on-error: true
         run: |
-          open -n mac/.build/stage/Aster.app --args --open 'https://en.wikipedia.org/wiki/Aster_(plant)' --show-tools
+          # Sample study data so the screenshot shows the redesign with content.
+          dir="$HOME/Library/Application Support/Aster/Study Tools"
+          mkdir -p "$dir"
+          today=$(date +%F); yesterday=$(date -v-1d +%F); tomorrow=$(date -v+1d +%F)
+          cat > "$dir/planner.json" <<JSON
+          {"schema":1,"tasks":[{"id":"t1","title":"History IA draft","due":"$yesterday","category":"assignment","priority":"high","course":"History HL","completed":[]},{"id":"t2","title":"Maths paper 1 revision","due":"$today","category":"study","completed":["$today"]},{"id":"t3","title":"Vocabulary practice","due":"$today","time":"18:00","durationMinutes":20,"recurrence":{"freq":"daily","interval":1},"completed":[]},{"id":"t4","title":"Chemistry lab write-up","due":"$tomorrow","time":"09:00","category":"exam","course":"Chemistry SL","completed":[]}]}
+          JSON
+          cat > "$dir/bookmarks.json" <<JSON
+          {"schema":1,"folders":[{"id":"f1","name":"Maths"}],"bookmarks":[{"id":"b1","url":"https://www.desmos.com/calculator","title":"Desmos","folderId":"f1","addedAt":"2026-11-01T10:00:00Z"},{"id":"b2","url":"https://phet.colorado.edu/","title":"PhET Simulations","folderId":null,"addedAt":"2026-11-02T10:00:00Z"},{"id":"b3","url":"https://www.ibo.org/","title":"International Baccalaureate","folderId":null,"addedAt":"2026-11-03T10:00:00Z"},{"id":"b4","url":"https://en.wikipedia.org/wiki/Industrial_Revolution","title":"Industrial Revolution","folderId":null,"addedAt":"2026-11-04T10:00:00Z"}]}
+          JSON
+          open -n mac/.build/stage/Aster.app --args --show-tools
           sleep 15
           screencapture -x work/screenshot.png
           pkill -x Aster || true
