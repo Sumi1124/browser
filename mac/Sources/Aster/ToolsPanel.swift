@@ -114,7 +114,7 @@ final class ToolsPanel: NSObject, WKScriptMessageHandlerWithReply, WKNavigationD
         configuration.setURLSchemeHandler(Self.schemeHandler, forURLScheme: AppSchemeHandler.scheme)
         configuration.websiteDataStore = .default()
         webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.isInspectable = true
+        if #available(macOS 13.3, *) { webView.isInspectable = true }
         super.init()
         // The bridge exists only in the tools page's own JavaScript world. A weak
         // forwarder avoids WebKit keeping this panel (and its window) alive.

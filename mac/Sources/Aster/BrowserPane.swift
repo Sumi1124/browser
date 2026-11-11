@@ -70,8 +70,8 @@ final class BrowserPane: NSObject, WKNavigationDelegate, WKUIDelegate {
             }
             return
         }
-        // ⌘-click opens a link in a new tab.
-        if action.navigationType == .linkActivated, action.modifierFlags.contains(.command), action.targetFrame?.isMainFrame == true {
+        // ⌘-click or a middle-click opens a link in a new tab.
+        if action.navigationType == .linkActivated, action.modifierFlags.contains(.command) || action.buttonNumber == 2 {
             decisionHandler(.cancel)
             openInNewTab?(url)
             return

@@ -126,3 +126,35 @@ final class BookmarkFileTests: XCTestCase {
         XCTAssertFalse(file.contains(URL(string: "https://example.org")!))
     }
 }
+
+final class StartPageTests: XCTestCase {
+    func testSearchFormsForEveryProvider() {
+        XCTAssertEqual(StartPage.searchForm(for: .provider(id: "google"))?.action, "https://www.google.com/search")
+        XCTAssertEqual(StartPage.searchForm(for: .provider(id: "google"))?.field, "q")
+        XCTAssertEqual(StartPage.searchForm(for: .provider(id: "yahoo"))?.field, "p")
+        for provider in SearchProvider.all { XCTAssertNotNil(StartPage.searchForm(for: provider), provider.id) }
+    }
+
+    func testBookmarksAreEscaped() {
+        let evil = BookmarkFile.Bookmark(id: "a", title: "<script>alert(1)</script>\" onmouseover=\"x", url: URL(string: "https://example.org/?a=1&b=\"2\"")!, folderId: nil)
+        let html = StartPage.html(workspace: "Tom & Jerry", isPrivate: false, provider: .provider(id: "duckduckgo"), bookmarks: [evil])
+        XCTAssertFalse(html.contains("<script>"))
+        XCTAssertFalse(html.contains("\" onmouseover=\"x"))
+        XCTAssertTrue(html.contains("&lt;script&gt;"))
+        XCTAssertTrue(html.contains("Tom &amp; Jerry workspace"))
+        XCTAssertTrue(html.contains(#"action="https://duckduckgo.com/""#))
+        XCTAssertTrue(html.contains("default-src 'none'"), "the start page runs no scripts")
+        let empty = StartPage.html(workspace: "Personal", isPrivate: true, provider: .fallback, bookmarks: [])
+        XCTAssertTrue(empty.contains("Press ⌘D"))
+        XCTAssertTrue(empty.contains("Private window"))
+    }
+}
+
+final class MonogramTests: XCTestCase {
+    func testLetterComesFromTheName() {
+        let wiki = BookmarkFile.Bookmark(id: "w", title: "Industrial Revolution", url: URL(string: "https://en.wikipedia.org/wiki/Industrial_Revolution")!, folderId: nil)
+        XCTAssertEqual(StartPage.monogram(for: wiki).letter, "I")
+        let quoted = BookmarkFile.Bookmark(id: "q", title: "“PhET” sims", url: URL(string: "https://phet.colorado.edu")!, folderId: nil)
+        XCTAssertEqual(StartPage.monogram(for: quoted).letter, "P")
+    }
+}

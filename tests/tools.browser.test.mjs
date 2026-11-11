@@ -73,8 +73,8 @@ test('study tools panel works end to end with the native bridge', async () => {
     await page.waitForSelector('html[data-ready="true"]');
 
     // Planner: add a task, complete it, export a calendar.
-    await page.fill('#planner input[placeholder="What needs doing?"]', 'Physics lab report');
-    await page.click('#planner button:has-text("Add")');
+    await page.fill('#planner input[placeholder="Add a task…"]', 'Physics lab report');
+    await page.click('#planner button[aria-label="Add task"]');
     await page.waitForSelector('#planner li:has-text("Physics lab report")');
     await page.click('#planner button:has-text("Export to Calendar")');
     const ics = await page.evaluate(() => window.__saved.at(-1));
@@ -127,9 +127,9 @@ test('study tools panel works end to end with the native bridge', async () => {
 
     // Bookmarks: bookmark the current page, detect a duplicate, use folders, export and import.
     await page.click('.tabs button[data-view="bookmarks"]');
-    await page.click('#bookmarks button:has-text("Bookmark current page")');
+    await page.click('#bookmarks button:has-text("Bookmark this page")');
     await page.waitForSelector('#bookmarks li:has-text("Desmos | Graphing Calculator")');
-    await page.click('#bookmarks button:has-text("Bookmark current page")');
+    await page.click('#bookmarks button:has-text("Bookmark this page")');
     await page.waitForSelector('#toast:has-text("already bookmarked")');
     await page.fill('#bookmarks input[placeholder="New folder name"]', 'Maths');
     await page.click('#bookmarks button:has-text("Add folder")');
@@ -183,8 +183,8 @@ test('study tools panel works end to end with the native bridge', async () => {
     await page.reload();
     await page.waitForSelector('html[data-ready="true"]');
     await page.click('.tabs button[data-view="planner"]');
-    await page.fill('#planner input[placeholder="What needs doing?"]', 'Should not save');
-    await page.click('#planner button:has-text("Add")');
+    await page.fill('#planner input[placeholder="Add a task…"]', 'Should not save');
+    await page.click('#planner button[aria-label="Add task"]');
     await page.waitForSelector('#toast.error:has-text("locked")');
     assert.equal(await page.evaluate(() => window.__store.planner), '{"schema":1,"tasks":[{"id":"bad"}]}');
 

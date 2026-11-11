@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let first = BrowserWindowController.open(context: currentContext, url: urls.first)
         for url in urls.dropFirst() { BrowserWindowController.open(context: first.context, url: url, tabbedWith: first.window, focus: false) }
         if arguments.contains("--show-tools") { first.setToolsVisible(true) }
-        NSApp.activate()
+        activateApp()
     }
 
     /// Links opened from other apps when Aster is the default browser.
@@ -49,7 +49,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             let host = (NSApp.keyWindow?.windowController as? BrowserWindowController) ?? BrowserWindowController.all.last
             BrowserWindowController.open(context: host?.context ?? currentContext, url: url, tabbedWith: host?.window)
         }
-        NSApp.activate()
+        activateApp()
+    }
+
+    private func activateApp() {
+        if #available(macOS 14, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
+    }
+
+    // MARK: Reopen closed tab
+
+    private var closedTabs: [(url: URL, workspaceId: String)] = []
+
+    func rememberClosedTab(url: URL, workspaceId: String) {
+        closedTabs.append((url, workspaceId))
+        if closedTabs.count > 25 { closedTabs.removeFirst() }
+    }
+
+    @IBAction func reopenClosedTab(_ sender: Any?) {
+        guard let last = closedTabs.popLast() else { return }
+        let workspace = Workspace.defaults.first { $0.id == last.workspaceId } ?? Workspace.defaults[0]
+        let context = BrowsingContext.workspace(workspace)
+        let host = BrowserWindowController.all.last { $0.context === context && $0.window?.isVisible == true }
+        BrowserWindowController.open(context: context, url: last.url, tabbedWith: host?.window)
+    }
+
+    @IBAction func showDownloads(_ sender: Any?) {
+        if let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+            NSWorkspace.shared.open(folder)
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -172,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(reopenClosedTab(_:)) { return !closedTabs.isEmpty }
         if item.action == #selector(selectSearchEngine(_:)) {
             item.state = (item.representedObject as? String) == searchProvider.id ? .on : .off
         }
@@ -230,6 +258,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             item("Split Search…", #selector(openSplitSearch(_:)), "f", [.command, .option]),
             .separator(),
             item("Close Tab", #selector(NSWindow.performClose(_:)), "w"),
+            .separator(),
+            item("Print…", #selector(BrowserWindowController.printPage(_:)), "p"),
         ])
         submenu("Edit", [
             item("Undo", Selector(("undo:")), "z"),
@@ -252,12 +282,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             item("Zoom Out", #selector(BrowserWindowController.asterZoomOut(_:)), "-"),
             .separator(),
             item("Show Study Tools", #selector(BrowserWindowController.toggleTools(_:)), "s", [.command, .option]),
+            item("Show Downloads", #selector(showDownloads(_:)), "l", [.command, .option]),
             .separator(),
             item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ])
         submenu("History", [
             item("Back", #selector(BrowserWindowController.goBack(_:)), "["),
             item("Forward", #selector(BrowserWindowController.goForward(_:)), "]"),
+            .separator(),
+            item("Reopen Closed Tab", #selector(reopenClosedTab(_:)), "t", [.command, .shift]),
         ])
         submenu("Bookmarks", [
             item("Bookmark This Page", #selector(BrowserWindowController.toggleBookmark(_:)), "d"),

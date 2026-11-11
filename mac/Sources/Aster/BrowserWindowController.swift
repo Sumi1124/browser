@@ -12,6 +12,12 @@ private extension NSToolbarItem.Identifier {
     static let cite = Self("cite")
     static let tools = Self("tools")
     static let bookmark = Self("bookmark")
+    static let workspace = Self("workspace")
+}
+
+/// Aster's violet, from the flower in the app icon.
+extension NSColor {
+    static let asterAccent = NSColor(srgbRed: 0.431, green: 0.337, blue: 0.812, alpha: 1)
 }
 
 /// One browser tab. Tabs are native macOS window tabs, grouped per
@@ -29,7 +35,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     /// collapsing and expanding, so the sidebar always gets a real width.
     private let splitController = NSSplitViewController()
     private var toolsItem: NSSplitViewItem!
-    private let addressField = NSTextField()
+    private let addressField = AddressField()
+    private var pageContainer: PageContainer!
     private var editingAddress = false
     private var toolbarButtons: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
     private(set) lazy var findBar = FindBar(webView: pane.webView)
@@ -53,7 +60,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
             controller.window?.center()
             controller.showWindow(nil)
         }
-        if let url { controller.pane.load(url) } else if configuration == nil { controller.focusAddressBar() }
+        if let url {
+            controller.pane.load(url)
+        } else if configuration == nil {
+            controller.showStartPage()
+            controller.focusAddressBar()
+        }
         return controller
     }
 
@@ -96,13 +108,26 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     private func buildContent() {
         // The find bar sits above the page and is hidden until ⌘F.
         let pageController = NSViewController()
-        pageController.view = PageContainer(findBar: findBar.view, page: pane.webView)
+        pageContainer = PageContainer(findBar: findBar.view, page: pane.webView)
+        pageController.view = pageContainer
         let pageItem = NSSplitViewItem(viewController: pageController)
         pageItem.minimumThickness = 320
         pageItem.holdingPriority = .defaultLow
 
+        // The sidebar sits on a translucent macOS sidebar material; the tools
+        // page draws a light tint over it.
         let toolsController = NSViewController()
-        toolsController.view = tools.webView
+        let material = NSVisualEffectView()
+        material.material = .sidebar
+        material.blendingMode = .behindWindow
+        material.state = .followsWindowActiveState
+        tools.webView.frame = material.bounds
+        tools.webView.autoresizingMask = [.width, .height]
+        material.addSubview(tools.webView)
+        if tools.webView.responds(to: NSSelectorFromString("_setDrawsBackground:")) || tools.webView.responds(to: NSSelectorFromString("setDrawsBackground:")) {
+            tools.webView.setValue(false, forKey: "drawsBackground")
+        }
+        toolsController.view = material
         toolsItem = NSSplitViewItem(viewController: toolsController)
         toolsItem.canCollapse = true
         toolsItem.minimumThickness = 300
@@ -136,7 +161,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
 
     private func buildToolbar() {
         // A new identifier so layouts saved by 0.3.0 don't hide the bookmark star.
-        let toolbar = NSToolbar(identifier: "AsterBrowser.2")
+        let toolbar = NSToolbar(identifier: "AsterBrowser.3")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = true
@@ -145,11 +170,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.back, .forward, .reload, .flexibleSpace, .address, .bookmark, .flexibleSpace, .splitSearch, .cite, .tools]
+        [.back, .forward, .reload, .workspace, .flexibleSpace, .address, .bookmark, .flexibleSpace, .splitSearch, .cite, .tools]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.back, .forward, .reload, .address, .bookmark, .splitSearch, .cite, .tools, .flexibleSpace, .space]
+        [.back, .forward, .reload, .workspace, .address, .bookmark, .splitSearch, .cite, .tools, .flexibleSpace, .space]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
@@ -175,6 +200,22 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         case .reload: return button("arrow.clockwise", "Reload", #selector(reloadOrStop(_:)))
         case .splitSearch: return button("rectangle.split.2x1", "Split Search", #selector(AppDelegate.openSplitSearch(_:)))
         case .cite: return button("quote.bubble", "Cite This Page", #selector(citeThisPage(_:)))
+        case .workspace:
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            let button = NSButton(title: context.name, target: self, action: #selector(showWorkspaceMenu(_:)))
+            button.bezelStyle = .texturedRounded
+            // Palette colours survive the toolbar's own tinting of template images.
+            let symbol = NSImage.SymbolConfiguration(pointSize: context.isPrivate ? 11 : 7, weight: .regular)
+                .applying(.init(paletteColors: [context.isPrivate ? .secondaryLabelColor : .asterAccent]))
+            button.image = NSImage(systemSymbolName: context.isPrivate ? "eye.slash" : "circle.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(symbol)
+            button.imagePosition = .imageLeading
+            button.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
+            button.toolTip = context.isPrivate ? "Private window" : "Workspace: \(context.name). Click to open another workspace."
+            button.setAccessibilityLabel("Workspace: \(context.name)")
+            item.view = button
+            item.label = "Workspace"
+            return item
         case .bookmark:
             let item = button("star", "Bookmark This Page", #selector(toggleBookmark(_:)))
             DispatchQueue.main.async { [weak self] in self?.refreshBookmarkStar(force: true) }
@@ -215,7 +256,34 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         reload?.image = NSImage(systemSymbolName: webView.isLoading ? "xmark" : "arrow.clockwise", accessibilityDescription: nil)
         reload?.label = webView.isLoading ? "Stop" : "Reload"
         reload?.toolTip = reload?.label
+        pageContainer?.setProgress(webView.estimatedProgress, loading: webView.isLoading)
         refreshBookmarkStar()
+    }
+
+    // MARK: Start page and workspaces
+
+    /// Shows the Start page (search box and bookmark tiles) in this tab.
+    func showStartPage() {
+        let bookmarks = (try? BookmarkFile(store: ToolsHub.shared.store).read().bookmarks) ?? []
+        let html = StartPage.html(workspace: context.name, isPrivate: context.isPrivate,
+                                  provider: AppDelegate.shared.searchProvider, bookmarks: bookmarks.reversed())
+        pane.webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    @objc private func showWorkspaceMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        let heading = NSMenuItem(title: "Open a new window in…", action: nil, keyEquivalent: "")
+        heading.isEnabled = false
+        menu.addItem(heading)
+        for workspace in Workspace.defaults {
+            let item = NSMenuItem(title: workspace.name, action: #selector(AppDelegate.newWorkspaceWindow(_:)), keyEquivalent: "")
+            item.representedObject = workspace.id
+            item.state = workspace.id == context.id ? .on : .off
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "New Private Window", action: #selector(AppDelegate.newPrivateWindow(_:)), keyEquivalent: ""))
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
 
     // MARK: Bookmarks
@@ -318,6 +386,18 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         if pane.webView.isLoading { pane.webView.stopLoading() } else { pane.webView.reload() }
     }
     @IBAction func reloadPage(_ sender: Any?) { pane.webView.reload() }
+
+    @IBAction func printPage(_ sender: Any?) {
+        guard let window else { return }
+        let info = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo()
+        info.horizontalPagination = .automatic
+        info.verticalPagination = .automatic
+        info.isHorizontallyCentered = false
+        let operation = pane.webView.printOperation(with: info)
+        // WebKit prints blank pages unless the operation's view has a frame.
+        operation.view?.frame = pane.webView.bounds
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+    }
     @IBAction func openLocation(_ sender: Any?) { focusAddressBar() }
     @IBAction func newTab(_ sender: Any?) { Self.open(context: context, tabbedWith: window) }
     override func newWindowForTab(_ sender: Any?) { newTab(sender) }
@@ -401,6 +481,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     }
 
     func windowWillClose(_ notification: Notification) {
+        // Remember the page for History → Reopen Closed Tab (never for private windows).
+        if !context.isPrivate, let url = pane.webView.url, BookmarkFile.key(url) != nil {
+            AppDelegate.shared.rememberClosedTab(url: url, workspaceId: context.id)
+        }
         pane.webView.stopLoading()
         pane.onChange = nil
         if let dataObserver { NotificationCenter.default.removeObserver(dataObserver) }
@@ -412,6 +496,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
 final class PageContainer: NSView {
     private let findBar: NSView
     private let page: NSView
+    /// A thin loading bar along the top edge, drawn over the page.
+    private let progressLine = NSView()
+    private var progress: Double = 0
 
     init(findBar: NSView, page: NSView) {
         self.findBar = findBar
@@ -421,6 +508,16 @@ final class PageContainer: NSView {
         page.translatesAutoresizingMaskIntoConstraints = true
         addSubview(page)
         addSubview(findBar)
+        progressLine.wantsLayer = true
+        progressLine.layer?.backgroundColor = NSColor.asterAccent.cgColor
+        progressLine.isHidden = true
+        addSubview(progressLine)
+    }
+
+    func setProgress(_ value: Double, loading: Bool) {
+        progress = max(0.05, min(1, value))
+        progressLine.isHidden = !loading
+        needsLayout = true
     }
 
     required init?(coder: NSCoder) { nil }
@@ -432,5 +529,16 @@ final class PageContainer: NSView {
         let barHeight = findBar.isHidden ? 0 : ceil(findBar.fittingSize.height)
         findBar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: barHeight)
         page.frame = NSRect(x: 0, y: barHeight, width: bounds.width, height: max(0, bounds.height - barHeight))
+        progressLine.frame = NSRect(x: 0, y: 0, width: bounds.width * progress, height: 2)
+    }
+}
+
+/// The address bar. One click selects the whole address, as in Safari, so
+/// typing replaces it instead of inserting into the middle of a URL.
+final class AddressField: NSTextField {
+    override func mouseDown(with event: NSEvent) {
+        let wasEditing = currentEditor() != nil
+        super.mouseDown(with: event)
+        if !wasEditing { currentEditor()?.selectAll(nil) }
     }
 }

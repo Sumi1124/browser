@@ -32,8 +32,11 @@ final class BrowsingContext {
         let uuid = ids[workspace.id].flatMap(UUID.init(uuidString:)) ?? UUID()
         ids[workspace.id] = uuid.uuidString
         UserDefaults.standard.set(ids, forKey: storeIdsKey)
-        let context = BrowsingContext(id: workspace.id, name: workspace.name, isPrivate: false,
-                                      dataStore: WKWebsiteDataStore(forIdentifier: uuid))
+        // Separate per-workspace stores need macOS 14. On macOS 13 every
+        // workspace shares the default store (logins are shared).
+        let store: WKWebsiteDataStore
+        if #available(macOS 14, *) { store = WKWebsiteDataStore(forIdentifier: uuid) } else { store = .default() }
+        let context = BrowsingContext(id: workspace.id, name: workspace.name, isPrivate: false, dataStore: store)
         workspaces[workspace.id] = context
         return context
     }
@@ -62,6 +65,8 @@ enum WebViewFactory {
         // Many sites check for "Safari" to decide which features to serve.
         configuration.applicationNameForUserAgent = "Version/18.0 Safari/605.1.15"
         configuration.allowsAirPlayForMediaPlayback = true
+        // Lets video players (YouTube, Vimeo…) use their full-screen button.
+        configuration.preferences.isElementFullscreenEnabled = true
         return configuration
     }
 
@@ -70,7 +75,7 @@ enum WebViewFactory {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
-        webView.isInspectable = true
+        if #available(macOS 13.3, *) { webView.isInspectable = true }
         return webView
     }
 }
