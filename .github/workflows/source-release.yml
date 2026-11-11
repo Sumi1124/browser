@@ -1,0 +1,21 @@
+name: Source milestone release
+on:
+  push:
+    tags: ['v*-source']
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/test_core.py --sanitize
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - run: python3 scripts/source_release.py
+      - name: Create a source-only draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ github.ref_name }}
+        run: gh release create "$SOURCE_TAG" --draft --verify-tag --title "$SOURCE_TAG — source milestone" --notes-file docs/RELEASE_NOTES.md work/dist/*

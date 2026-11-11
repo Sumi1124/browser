@@ -1,0 +1,23 @@
+name: Native Chromium build (dedicated runner)
+# Never executes untrusted pull-request code on a persistent self-hosted runner.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [macos-arm64, macos-x64, windows-x64]
+        required: true
+permissions:
+  contents: read
+jobs:
+  chromium:
+    runs-on: [self-hosted, '${{ inputs.target }}', aster-chromium]
+    environment: 'native-${{ inputs.target }}'
+    timeout-minutes: 1440
+    env:
+      ASTER_CHROMIUM_ROOT: ${{ vars.ASTER_CHROMIUM_ROOT }}
+      ASTER_TARGET_CPU: '${{ inputs.target == ''macos-arm64'' && ''arm64'' || ''x64'' }}'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out pinned Chromium, apply overlay, compile and run tests
+        run: python scripts/native_ci.py

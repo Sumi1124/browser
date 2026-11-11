@@ -1,0 +1,41 @@
+name: Core and overlay validation
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  cpp:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build --config Debug --parallel 2
+      - run: ctest --test-dir build -C Debug --output-on-failure
+  sanitize-and-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/test_core.py --sanitize
+      - run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - run: python scripts/check_upstream.py
+  research:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Test extraction in installed sandboxed Chrome
+        env:
+          CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
+        run: npm run test:browser
