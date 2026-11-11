@@ -11,6 +11,7 @@ Recorded 2026-11-11. **No full Chromium checkout, native Aster compile, launch, 
 | CMake configure/build and CTest | Passed on Linux |
 | Overlay/resource tooling tests | 10 passed |
 | Citation/export Node tests | 5 passed |
+| Library, planner, flashcard, dataset, chart, AI consent and backup Node tests | 27 passed (Node 22.23), including 9,000 corrupted stored records, 6,000 random parser inputs and 300 damaged backups |
 | Metadata tests in installed sandboxed Chromium 156.0.8078.79 | 4 passed |
 | Patch application and exact reversal on pinned 157.0.8103.50 files | Passed; three upstream files |
 | Native overlay compilation and GN dependency checks | Not run; full checkout unavailable |
@@ -36,10 +37,11 @@ The installed Chromium used for metadata tests is an environment tool. It is not
 | Tab orientation, command palette, customizable toolbar/theme | Upstream support where available; Aster-specific controls/design not implemented |
 | Citation extraction/exports | Tested module; no privileged bindings and no network requests |
 | APA/MLA/Chicago/Harvard/IEEE | CSL processor/styles and citation sidebar not implemented |
-| Research library folders/tags/annotations/bibliographies/PDF citations | Not implemented |
-| MYP/DP/business tools | Default workspace names only; planners, OPVL, EE/TOK/IA, notes, flashcards and timers not implemented |
-| Data import/analysis/charts | Not implemented |
-| AI integrations/secure key storage | Not implemented; no provider content transmission code exists |
+| Research library folders/tags/annotations/bibliographies | Standalone module tested: folders, tags, annotations, DOI/URL/title duplicate detection, merge-missing-fields and CSL-JSON/BibTeX/RIS bibliography export. No library UI or storage binding; PDF citations not implemented |
+| MYP/DP/business tools | Standalone planner (one-off and daily/weekly/monthly recurring tasks, agenda/overdue view, iCalendar export) and SM-2 flashcards tested. No native UI. OPVL, EE/TOK/IA organizers, notes and timers not implemented |
+| Data import/analysis/charts | Standalone CSV/TSV/JSON import, type inference, cleaning, descriptive statistics, regression, SVG charts and injection-safe CSV export tested. Not yet run in a sandboxed worker; XLSX import not implemented |
+| AI integrations/secure key storage | Consent policy module tested: provider config validation (keychain references only), redaction, per-request preview, single-use payload-bound consent and provenance labels. No request broker, keychain integration or network transmission code exists |
+| Backups | Versioned, SHA-256-checksummed backups with ordered migrations and grandfather-father-son retention tested. Not encrypted or signed; no scheduler or file I/O binding |
 | Branding/icons/install/update identities | Not applied; upstream identity remains |
 | Native release workflows | Native build/test workflow supplied; installer/signing/release pipeline remains incomplete |
 
@@ -51,4 +53,5 @@ The installed Chromium used for metadata tests is an environment tool. It is not
 - Native English UI strings need GRIT localization, accessibility testing, keyboard shortcut integration, and small-window layout review.
 - Profile preference writes rely on Chromium's normal persistence schedule. Power-loss durability and cross-window/native lifecycle behavior still need integration tests.
 - The bounded codec is a storage format, not encryption. A profile's local operating-system access controls protect its preferences.
+- The JavaScript modules in `aster/research`, `aster/study`, `aster/data`, `aster/ai` and `aster/storage` are standalone. Nothing connects them to the browser yet, and the planned database-backed storage for large collections does not exist. See [API.md](API.md).
 - No security, performance or production-readiness claim follows from standalone tests or patch applicability.

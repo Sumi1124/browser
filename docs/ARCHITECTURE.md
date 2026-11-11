@@ -24,13 +24,14 @@ The diagram's metadata review UI is future work. There is no renderer-to-browser
 2. **Workspace Manager:** pure C++ data and validation. Profile identity is not a user-supplied path or arbitrary identifier crossing a renderer boundary. The adapter obtains `browser->GetProfile()` and uses its registered, non-sync preference.
 3. **Multi-Search:** templates are HTTPS-only, exactly one escaped query placeholder, no credentials/fragments/control characters. The native boundary also validates with GURL. No search scraping. Default engines are Google/DuckDuckGo. Existing native split tabs provide actual WebContents and normal delegates.
 4. **Citation Engine:** DOM extraction yields untrusted plain metadata and a missing-field list. Exports sanitize delimiters and prevent injected RIS records. A future Mojo bridge must validate lengths/schema/origin and request explicit user review. No fabricated values or website-supplied code runs in the browser process.
-5. **Research Library:** planned profile-keyed local database with folders, tags, annotations, CSL-JSON records and versioned migrations.
-6. **IB Study Tools:** planned local MYP/DP records, flexible criteria and evidence-oriented learning features, separate from citation processing.
+5. **Research Library:** `aster/research/library.mjs` holds folders, tags, annotations, sanitized metadata records, duplicate detection and bibliography exports as plain data with a versioned schema. A profile-keyed database binding is still planned.
+6. **IB Study Tools:** `aster/study/planner.mjs` handles tasks, recurrence, the agenda and RFC 5545 export. `aster/study/flashcards.mjs` handles SM-2 review. MYP/DP criteria, OPVL and EE/TOK/IA organizers are still planned.
 7. **Business Tools:** planned notes/tasks/agendas built on common local records. Personal/business cookie isolation requires separate Chromium Profiles, not just workspace labels.
-8. **Data Analysis:** planned sandboxed parsing/worker execution, import preview and user-selected table extraction. Never parse arbitrary datasets in privileged UI/browser code.
-9. **AI:** planned optional request broker, per-request preview and consent, OS credential storage, and explicit provider/API configuration. No current implementation.
-10. **Settings:** Chromium PrefService for small profile-local state; current workspace codec uses bounded base64 storage. A dedicated service and migration to database-backed large collections precedes scale-up.
-11. **Release:** core tests on hosted runners; full browser builds on provisioned native runners. Platform identity/signing/updaters must be finished before distributing installers.
+8. **Data Analysis:** `aster/data/dataset.mjs` does bounded parsing, inference, cleaning and statistics, written to run inside a worker. `aster/data/chart.mjs` produces inert SVG and CSV output. Running these in a sandboxed worker and extracting user-selected tables from pages are still planned. Never parse arbitrary datasets in privileged UI/browser code.
+9. **AI:** `aster/ai/consent.mjs` implements the policy half: provider configuration validation, redaction, per-request preview and payload-bound single-use consent. The privileged request broker and OS keychain access are still planned. The broker must call `authorizeSend()` immediately before sending.
+10. **Backups:** `aster/storage/backup.mjs` handles checksummed, versioned export/import of module data, ordered migrations and retention planning.
+11. **Settings:** Chromium PrefService for small profile-local state; current workspace codec uses bounded base64 storage. A dedicated service and migration to database-backed large collections precedes scale-up.
+12. **Release:** core tests on hosted runners; full browser builds on provisioned native runners. Platform identity/signing/updaters must be finished before distributing installers.
 
 ## Persistence contract
 

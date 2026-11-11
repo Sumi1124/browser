@@ -3,9 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/research.test.mjs",
+    "test": "node --test tests/research.test.mjs tests/library.test.mjs tests/planner.test.mjs tests/study_data.test.mjs tests/consent_backup.test.mjs tests/robustness.test.mjs",
     "test:browser": "node --test tests/metadata.browser.test.mjs"
   },
-  "devDependencies": { "playwright-core": "1.58.2" },
-  "engines": { "node": ">=22" }
+  "devDependencies": {
+    "playwright-core": "1.58.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }
