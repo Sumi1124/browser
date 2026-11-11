@@ -41,7 +41,7 @@ jobs:
       - name: Screenshot
         continue-on-error: true
         run: |
-          open -n mac/.build/stage/Aster.app --args --open https://en.wikipedia.org/wiki/Aster_(plant) --show-tools
+          open -n mac/.build/stage/Aster.app --args --open 'https://en.wikipedia.org/wiki/Aster_(plant)' --show-tools
           sleep 15
           screencapture -x work/screenshot.png
           pkill -x Aster || true
