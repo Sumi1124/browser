@@ -401,7 +401,43 @@ public enum StartPage {
         return (String(letter).uppercased(), colors.0, colors.1)
     }
 
-    public static func html(workspace: String, isPrivate: Bool, provider: SearchProvider, bookmarks: [BookmarkFile.Bookmark]) -> String {
+    /// Today's tasks and due flashcards, as saved by the study-tools page.
+    public struct Glance: Equatable, Sendable {
+        public var tasksToday: Int
+        public var overdue: Int
+        public var next: String
+        public var cardsDue: Int
+        public var decks: [String]
+
+        /// Reads the saved summary; nil when it is missing, malformed or from another day.
+        public static func parse(_ text: String?, today: String) -> Glance? {
+            guard let text, let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+                  json["schema"] as? Int == 1, json["date"] as? String == today,
+                  let tasks = json["tasksToday"] as? Int, let overdue = json["overdue"] as? Int, let cards = json["cardsDue"] as? Int,
+                  tasks >= 0, overdue >= 0, cards >= 0 else { return nil }
+            let decks = (json["decks"] as? [String] ?? []).prefix(3).map { String($0.prefix(60)) }
+            return Glance(tasksToday: tasks, overdue: overdue, next: String((json["next"] as? String ?? "").prefix(120)), cardsDue: cards, decks: Array(decks))
+        }
+    }
+
+    static func glanceSection(_ glance: Glance?) -> String {
+        guard let glance, glance.tasksToday + glance.overdue + glance.cardsDue > 0 else { return "" }
+        let plural = { (count: Int, word: String) in "\(count) \(word)\(count == 1 ? "" : "s")" }
+        let taskDetail = [glance.overdue > 0 ? "\(glance.overdue) overdue" : nil, glance.next.isEmpty ? nil : glance.next]
+            .compactMap { $0 }.joined(separator: " · ")
+        let calendar = #"<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg>"#
+        let cards = #"<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="4" width="10" height="9" rx="1.5"/><path d="M5 2h8.5a.5.5 0 0 1 .5.5V10"/></svg>"#
+        var items: [String] = []
+        if glance.tasksToday + glance.overdue > 0 {
+            items.append(#"<div class="glance"><span class="gicon violet">\#(calendar)</span><div><strong>\#(escape(plural(glance.tasksToday, "task"))) today</strong><span>\#(escape(taskDetail))</span></div></div>"#)
+        }
+        if glance.cardsDue > 0 {
+            items.append(#"<div class="glance"><span class="gicon amber">\#(cards)</span><div><strong>\#(escape(plural(glance.cardsDue, "flashcard"))) due</strong><span>\#(escape(glance.decks.joined(separator: " · ")))</span></div></div>"#)
+        }
+        return #"<section class="glances" aria-label="Today">\#(items.joined())</section>"#
+    }
+
+    public static func html(workspace: String, isPrivate: Bool, provider: SearchProvider, bookmarks: [BookmarkFile.Bookmark], glance: Glance? = nil) -> String {
         let form = searchForm(for: provider) ?? searchForm(for: .fallback)!
         let tiles = bookmarks.prefix(12).map { bookmark -> String in
             let mark = monogram(for: bookmark)
@@ -439,6 +475,11 @@ public enum StartPage {
         .mono{width:52px;height:52px;border-radius:12px;display:grid;place-items:center;font-size:20px;font-weight:700}
         .name{font-size:12px;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .hint{color:var(--muted);text-align:center;font-size:13px}
+        .glances{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+        .glance{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
+        .glance strong{display:block;font-size:13px}.glance span{display:block;font-size:12px;color:var(--muted)}
+        .gicon{flex:none;width:36px;height:36px;border-radius:10px;display:grid!important;place-items:center}
+        .gicon svg{width:18px;height:18px}.violet{background:#eeeafc;color:#5b45c2!important}.amber{background:#fdf0dc;color:#9a5b00!important}
         </style></head>
         <body>
         <header>
@@ -450,6 +491,7 @@ public enum StartPage {
         <button type="submit">Search</button>
         </form>
         <section>\(bookmarkSection)</section>
+        \(isPrivate ? "" : glanceSection(glance))
         </body></html>
         """
     }

@@ -1,43 +1,27 @@
-# Aster 0.6.0: automatic updates
+# Aster 0.7.0: the full design, built in
 
 ## Which file should I download?
 
 | File | For |
 | --- | --- |
-| **`Aster-0.6.0.dmg`** | **Mac users.** Open it and drag Aster to Applications, replacing the old copy. Needs macOS 13 Ventura or newer, on Apple silicon or Intel. |
-| `aster-modules-0.6.0.zip` | Developers. The study and research JavaScript modules, with a demo and tests (Node.js 22+). |
+| **`Aster-0.7.0.dmg`** | **Mac users.** If you have Aster 0.6.0, you don't need this: choose **Aster → Check for Updates…** (or wait for the daily check) and click **Install and Relaunch**. Otherwise, open it and drag Aster to Applications. Needs macOS 13 Ventura or newer. |
+| `aster-modules-0.7.0.zip` | Developers. The study and research JavaScript modules, with a demo and tests (Node.js 22+). |
 | `aster-source-<commit>.zip` / `.tar.gz` | The complete source code |
 | `SHA256SUMS.txt` | Checks that your download isn't damaged |
 
-**This is the last version you need to download by hand.** From 0.6.0 on, Aster updates itself.
+## What changed
 
-### First launch on a Mac
+0.5.0 introduced the redesign, but on a fresh install several parts of it didn't show. This release makes the app match the design:
 
-Aster isn't signed with a paid Apple Developer ID, so macOS asks you to confirm it once:
-
-1. Open Aster. macOS says it can't verify the app; click **Done**.
-2. Go to **System Settings → Privacy & Security** and click **Open Anyway** next to the Aster message.
-3. Confirm with your password or Touch ID.
-
-If macOS says Aster "is damaged", or there's no **Open Anyway** button, run this in Terminal after dragging Aster to Applications:
-
-```
-xattr -dr com.apple.quarantine /Applications/Aster.app
-```
-
-## New: automatic updates
-
-- **Daily check:** once a day, Aster checks for a new version. When one is out, you'll see "Aster X is available" with the release notes and an **Install and Relaunch** button. You can also choose **Later** or **Skip This Version**.
-- **Check now:** **Aster → Check for Updates…** checks straight away.
-- **Turn it off:** **Aster → Check for Updates Automatically** turns the daily check on or off.
-- **Checked before installing:** the download must match the SHA-256 fingerprint GitHub publishes for it, the app inside must be Aster at the advertised version, and its code signature must verify. If any check fails, nothing is replaced.
-- **Kept across updates:** your study tools data and bookmarks.
-- **Where Aster must be:** in your **Applications** folder. If it's still running from the disk image, it will ask you to move it first.
+- **Study Tools sidebar:** now open by default. It's half of Aster's design, but it used to start hidden until you pressed ⌥⌘S. You can still hide it, and Aster remembers your choice.
+- **Tab bar:** always visible, even with one tab, showing the page title, as in the design.
+- **Start page:** now shows **Today**, with your tasks for today (including overdue ones and what's next) and the flashcards due, under your bookmarks. It updates as you tick off tasks or study. Private windows never show it.
+- **Sidebar button:** turns violet while the sidebar is open.
 
 ## Known limits
 
 - **Engine:** Aster for Mac uses WebKit, so Chrome extensions aren't supported.
-- **Not notarized:** see the first-launch steps above.
+- **Not notarized:** on first install, open it via System Settings → Privacy & Security → **Open Anyway**. If macOS says it's damaged, run `xattr -dr com.apple.quarantine /Applications/Aster.app`.
 - **macOS 13:** workspaces share website logins.
 - **Missing features:** history search is not included yet.
 - **Other platforms:** there is no Windows version.

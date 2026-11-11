@@ -87,6 +87,9 @@ test('study tools panel works end to end with the native bridge', async () => {
     assert.equal(await page.evaluate(() => window.__saved.length), 1);
     const stored = JSON.parse(await page.evaluate(() => window.__store.planner));
     assert.equal(stored.tasks[0].completed.length, 1);
+    // The Start page's summary follows the planner: the only task is now done.
+    await page.waitForFunction(() => JSON.parse(window.__store.glance || '{}').tasksToday === 0);
+    assert.equal(JSON.parse(await page.evaluate(() => window.__store.glance)).overdue, 0);
 
     // Flashcards: add a card and study it.
     await page.click('.tabs button[data-view="cards"]');

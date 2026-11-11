@@ -85,6 +85,26 @@ async function loadAll() {
 async function persist(key) {
   if (state.locked.has(key)) throw new Error(`Not saved: your ${key} data is locked until you restore a backup.`);
   await bridge.call('save', {key, text: JSON.stringify(state[key].toJSON())});
+  if (key === 'planner' || key === 'flashcards') publishGlance();
+}
+
+// A small summary the Start page shows ("3 tasks today", "12 flashcards due").
+// Computed here because this page has the planner's repeat rules and the
+// flashcard schedule; the Start page itself runs no scripts.
+let lastGlance = '';
+async function publishGlance() {
+  try {
+    const now = today();
+    const agenda = state.planner.agenda(now, {days: 1, lookbackDays: 30});
+    const open = agenda.upcoming.filter(item => !item.done);
+    const cards = state.flashcards.due(now, {limit: 100000});
+    const text = JSON.stringify({schema: 1, date: now, tasksToday: open.length, overdue: agenda.overdue.length,
+      next: (agenda.overdue[0] || open[0])?.title || '', cardsDue: cards.length,
+      decks: [...new Set(cards.map(card => card.deck))].slice(0, 3)});
+    if (text === lastGlance) return;
+    lastGlance = text;
+    await bridge.call('save', {key: 'glance', text});
+  } catch { /* the summary is optional */ }
 }
 
 // Applies a change, saves it and re-renders. Errors are shown, not thrown.
@@ -732,6 +752,7 @@ async function reload(key) {
     showError(error);
   }
   renderAll();
+  publishGlance();
 }
 
 window.asterTools = {receiveCitation, selectView, selfTest, reload};
@@ -741,6 +762,7 @@ document.querySelector('.tabs').addEventListener('click', event => {
   if (view) selectView(view);
 });
 await loadAll();
+publishGlance();
 let initial = 'planner';
 try { initial = localStorage.getItem('aster.view') || initial; } catch { /* default view */ }
 selectView(renderers[initial] ? initial : 'planner');
