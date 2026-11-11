@@ -45,6 +45,11 @@ jobs:
           sleep 15
           screencapture -x work/screenshot.png
           pkill -x Aster || true
+          # A small copy in the log, for reviewers who cannot download artifacts.
+          sips -Z 1000 -s format jpeg -s formatOptions 50 work/screenshot.png --out work/screenshot-small.jpg >/dev/null
+          echo "SCREENSHOT-BASE64-BEGIN"
+          base64 -b 2000 -i work/screenshot-small.jpg
+          echo "SCREENSHOT-BASE64-END"
       - uses: actions/upload-artifact@v4
         with:
           name: aster-mac
