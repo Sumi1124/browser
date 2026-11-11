@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         for url in urls.dropFirst() { BrowserWindowController.open(context: first.context, url: url, tabbedWith: first.window, focus: false) }
         if arguments.contains("--show-tools") { first.setToolsVisible(true) }
         activateApp()
+        Updater.shared.startAutomaticChecks()
     }
 
     /// Links opened from other apps when Aster is the default browser.
@@ -71,6 +72,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let context = BrowsingContext.workspace(workspace)
         let host = BrowserWindowController.all.last { $0.context === context && $0.window?.isVisible == true }
         BrowserWindowController.open(context: context, url: last.url, tabbedWith: host?.window)
+    }
+
+    @IBAction func checkForUpdates(_ sender: Any?) {
+        Task { @MainActor in await Updater.shared.check(userInitiated: true) }
+    }
+
+    @IBAction func toggleAutomaticUpdates(_ sender: Any?) {
+        Updater.shared.automaticChecks.toggle()
     }
 
     @IBAction func showDownloads(_ sender: Any?) {
@@ -200,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(reopenClosedTab(_:)) { return !closedTabs.isEmpty }
+        if item.action == #selector(toggleAutomaticUpdates(_:)) { item.state = Updater.shared.automaticChecks ? .on : .off }
         if item.action == #selector(selectSearchEngine(_:)) {
             item.state = (item.representedObject as? String) == searchProvider.id ? .on : .off
         }
@@ -239,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
         submenu("Aster", [
             item("About Aster", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+            item("Check for Updates…", #selector(checkForUpdates(_:))),
+            item("Check for Updates Automatically", #selector(toggleAutomaticUpdates(_:))),
             .separator(),
             engineItem,
             item("Set as Default Browser…", #selector(setAsDefaultBrowser(_:))),

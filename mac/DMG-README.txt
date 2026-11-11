@@ -31,6 +31,12 @@ and paste this line, then press Return:
 It removes the "downloaded from the internet" flag from Aster only.
 Then open Aster normally.
 
+UPDATES
+Aster checks for new versions once a day and offers to install them;
+click "Install and Relaunch". You can also choose Aster > Check for
+Updates..., or turn automatic checks off in the same menu. Aster must be
+in your Applications folder to update itself.
+
 REQUIREMENTS
 macOS 13 Ventura or newer, on an Apple silicon or Intel Mac.
 (On macOS 13, workspaces share website logins; separate logins per

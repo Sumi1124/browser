@@ -166,5 +166,37 @@ enum SelfTest {
         let expected = StartPage.searchForm(for: AppDelegate.shared.searchProvider)!
         try check(startInfo == "0|\(expected.action)|\(expected.field)", "start page has a script-free search form (\(startInfo ?? "-"))")
         start.window?.close()
+
+        // 6. Updates: install the freshly built disk image over a copy of this app,
+        // and refuse a damaged download or the wrong version.
+        if let dmgPath = ProcessInfo.processInfo.environment["ASTER_TEST_DMG"] {
+            let dmg = URL(fileURLWithPath: dmgPath)
+            let version = SemanticVersion(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")!
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("aster-update-test-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let target = folder.appendingPathComponent("Aster.app")
+            try Updater.run("/usr/bin/ditto", [Bundle.main.bundleURL.path, target.path])
+            let marker = target.appendingPathComponent("Contents/Resources/old-version-marker")
+            FileManager.default.createFile(atPath: marker.path, contents: Data("old".utf8))
+            let sha = try Updater.sha256(of: dmg)
+            var refusedDamaged = false
+            do { try Updater.install(diskImage: dmg, expectedSHA256: String(repeating: "0", count: 64), expectedVersion: version, replacing: target) } catch { refusedDamaged = true }
+            try check(refusedDamaged && FileManager.default.fileExists(atPath: marker.path), "updater refuses a download whose fingerprint doesn't match")
+            var refusedVersion = false
+            let wrong = SemanticVersion("\(version.major + 1).0.0")!
+            do { try Updater.install(diskImage: dmg, expectedSHA256: sha, expectedVersion: wrong, replacing: target) } catch { refusedVersion = true }
+            try check(refusedVersion && FileManager.default.fileExists(atPath: marker.path), "updater refuses an app with an unexpected version")
+            try Updater.install(diskImage: dmg, expectedSHA256: sha, expectedVersion: version, replacing: target)
+            let installed = NSDictionary(contentsOf: target.appendingPathComponent("Contents/Info.plist"))?["CFBundleShortVersionString"] as? String
+            try check(!FileManager.default.fileExists(atPath: marker.path) && installed == version.description, "updater replaces the app with the verified download")
+            try Updater.validate(app: target, expectedVersion: version)
+            try check(true, "updated app's signature verifies")
+        } else {
+            print("  --  updater install test skipped (set ASTER_TEST_DMG)")
+        }
+        if let release = try? await Updater.fetchLatest() {
+            print("  info  latest release on GitHub: \(release.version), disk image \(UpdatePolicy.diskImage(in: release) == nil ? "missing" : "found")")
+        }
     }
 }
