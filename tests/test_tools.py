@@ -95,7 +95,7 @@ class PackageTests(unittest.TestCase):
                 for required in ['README.md', 'API.md', 'LICENSE', 'package.json', 'examples/quickstart.mjs',
                                  'aster/study/planner.mjs', 'aster/storage/backup.mjs', 'tests/planner.test.mjs']:
                     self.assertIn(prefix + required, names)
-                self.assertNotIn(prefix + 'tests/metadata.browser.test.mjs', names)
+                self.assertFalse([name for name in names if name.endswith('.browser.test.mjs')])
                 manifest = json.loads(bundle.read(prefix + 'package.json'))
                 self.assertEqual(manifest['version'], '9.9.9')
                 for test in manifest['scripts']['test'].split()[2:]:
