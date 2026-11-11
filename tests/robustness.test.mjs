@@ -87,3 +87,12 @@ test('truncated or flipped backups are rejected cleanly', async () => {
     await assert.rejects(readBackup(variant), error => error instanceof AsterError);
   }
 });
+
+test('pure-JavaScript SHA-256 matches Node crypto', async () => {
+  const {sha256HexSync} = await import('../aster/common/util.mjs');
+  const {createHash} = await import('node:crypto');
+  const random = rng(3);
+  const inputs = ['', 'abc', 'a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'Ünïcödé ✓ 日本語', 'x'.repeat(100000)];
+  for (let i = 0; i < 200; i++) inputs.push(Array.from({length: Math.floor(random() * 300)}, () => String.fromCharCode(Math.floor(random() * 0x3000))).join(''));
+  for (const input of inputs) assert.equal(sha256HexSync(input), createHash('sha256').update(input, 'utf8').digest('hex'));
+});

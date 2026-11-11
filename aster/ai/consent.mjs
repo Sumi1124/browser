@@ -4,7 +4,7 @@
 // provenance labels for generated text. This module contains no network
 // code; a future request broker must call authorizeSend() immediately
 // before transmitting and send exactly the payload it authorized.
-import {clean, cleanMultiline, assertId, isPlainObject, canonicalJson, sha256Hex, fail} from '../common/util.mjs';
+import {clean, cleanMultiline, assertId, isPlainObject, canonicalJson, sha256Hex, randomId, fail} from '../common/util.mjs';
 
 export const AI_PURPOSES = Object.freeze(['explain', 'summarize', 'feedback', 'brainstorm', 'quiz', 'translate', 'other']);
 export const AI_LIMITS = Object.freeze({items: 16, characters: 200000, instructions: 4000, ttlMs: 5 * 60 * 1000, log: 500});
@@ -142,7 +142,7 @@ export class ConsentBroker {
     if (!isPlainObject(preview) || typeof preview.digest !== 'string' || !/^[0-9a-f]{64}$/.test(preview.digest)) {
       fail('invalid_preview', 'Approve a preview returned by prepareRequest');
     }
-    const grantId = globalThis.crypto.randomUUID();
+    const grantId = randomId();
     const expiresAt = this.#now() + this.#ttl;
     this.#grants.set(grantId, {digest: preview.digest, requestId: preview.requestId, expiresAt});
     this.#record(preview, 'approved');

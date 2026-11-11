@@ -15,7 +15,11 @@ concurrency:
   group: release
   cancel-in-progress: false
 jobs:
+  mac:
+    # Builds, unit-tests and self-tests the Mac app and uploads the .dmg.
+    uses: ./.github/workflows/mac-app.yml
   release:
+    needs: mac
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -54,12 +58,18 @@ jobs:
       - run: npm test
       - run: python scripts/test_core.py --sanitize
       - run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - uses: actions/download-artifact@v4
+        with:
+          name: aster-mac
+          path: work/mac
       - name: Build downloads
         run: |
           python scripts/package_modules.py
           python scripts/source_release.py
+          find work/mac -name "Aster-$VERSION.dmg" -exec cp {} work/dist/ \;
+          test -f "work/dist/Aster-$VERSION.dmg"
           cd work/dist
-          sha256sum *.zip *.tar.gz > SHA256SUMS.txt
+          sha256sum *.dmg *.zip *.tar.gz > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - name: Test the packaged zip on its own
         run: |
@@ -75,6 +85,6 @@ jobs:
         # not exist yet (workflow_dispatch); for a pushed tag it already does.
         run: >
           gh release create "$TAG" --target "$GITHUB_SHA" --prerelease
-          --title "Aster $TAG — study and research modules"
+          --title "Aster $TAG"
           --notes-file docs/RELEASE_NOTES.md
           work/dist/*

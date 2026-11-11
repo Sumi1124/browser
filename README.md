@@ -1,19 +1,25 @@
-# Aster — Chromium productivity browser
+# Aster: a productivity and research browser
 
-Aster is a temporary name for an open-source productivity and research browser built by extending **official Chromium**, with C++, native Views controls, normal Chromium tabs/WebContents, GN and depot_tools. No Electron, CEF or browser simulation is used.
+Aster is an open-source browser for studying and research, with a planner, flashcards, a research library with citations, data charts and backups built in.
 
-**Current delivery: a tested foundation and an uncompiled native Chromium overlay. A runnable Aster browser, macOS app/DMG and Windows executable/installer have not been built.** The available Linux environment cannot fit a Chromium checkout and build. See [validation and limits](docs/STATUS.md) and [measured resources](docs/ENVIRONMENT.md).
+It comes in two forms:
+
+- **Aster for Mac (available now).** A native macOS app built on WebKit, the engine already inside every Mac. It needs no huge Chromium build. See [mac/README.md](mac/README.md).
+- **Aster on Chromium (in progress).** The long-term cross-platform design extends **official Chromium** with C++ and native Views controls. Its foundation and overlay are written, but the overlay **has not been compiled**, because a Chromium build needs 100–300 GB of disk. See [validation and limits](docs/STATUS.md).
+
+Both share the same tested study-tools modules in `aster/`.
 
 ## Download
 
 Get the latest version from the **[Releases page](https://github.com/Sumi1124/browser/releases/latest)**:
 
-- **`aster-modules-<version>.zip`**: the study and research tools (planner, flashcards, research library, citations, data analysis, charts and backups) with a demo and tests. Unzip it, then run `node examples/quickstart.mjs` (needs [Node.js](https://nodejs.org/) 22+). The README inside explains everything.
-- **`aster-source-<commit>.zip`**: the complete source code.
+- **`Aster-<version>.dmg`: Aster for Mac.** Open it and drag Aster to Applications. It needs macOS 14 Sonoma or newer and runs on Apple silicon or Intel. Because the app isn't signed with a paid Apple Developer ID, the first time you open it, go to **System Settings → Privacy & Security → Open Anyway**.
+- `aster-modules-<version>.zip`: the study and research JavaScript modules, with a demo (`node examples/quickstart.mjs`, needs [Node.js](https://nodejs.org/) 22+) and tests.
+- `aster-source-<commit>.zip`: the complete source code.
 
-No installable browser app exists yet; see below.
+There's no Windows version yet.
 
-Developers can also run the demo straight from a clone:
+Developers can also run the modules demo straight from a clone:
 
 ```sh
 npm run example   # writes planner.ics, chart.svg, bibliography files and a backup to ./aster-example-output
@@ -30,7 +36,8 @@ npm run example   # writes planner.ics, chart.svg, bibliography files and a back
 - Data analysis: CSV/TSV/JSON import, type inference, cleaning, descriptive statistics, linear regression, static SVG charts and CSV export protected against formula injection.
 - AI consent policy: provider settings that hold keychain references only, redaction, a preview of each request, and single-use consent bound to the exact payload. No network or AI provider code exists.
 - Versioned, checksummed backups with migrations and retention planning.
-- These library, study, data, AI-consent and backup modules are tested standalone and **not yet connected to the browser UI**. See the [module API](docs/API.md).
+- These library, study, data and backup modules power the **Aster for Mac** study-tools sidebar. In the Chromium design they are not yet connected to the browser UI. See the [module API](docs/API.md).
+- **Aster for Mac** (`mac/`): a native Swift/AppKit/WebKit browser with tabs, workspaces that keep logins separate, private windows, Split Search, a study-tools sidebar, Cite This Page, downloads and default-browser support. It is built, unit-tested and self-tested on a hosted Mac in CI.
 - Exact Chromium revision pin, source hashes, guarded overlay installer, native build scripts, cross-platform core CI, native build workflow and source-release workflow.
 
 The four Chromium in-process tests are supplied but **have not run**. The passing browser tests exercise metadata extraction in the installed sandboxed Chromium, not an Aster binary.
@@ -81,6 +88,7 @@ Follow [BUILDING.md](docs/BUILDING.md) on a suitable native host. The browser re
 | `aster/ai/` | AI request consent policy (no network code) |
 | `aster/storage/` | Versioned backups and retention |
 | `aster/common/` | Shared validation helpers and `AsterError` |
+| `mac/` | Aster for Mac (Swift, AppKit, WebKit) and its `.dmg` build |
 | `chromium/overlay/` | Native browser adapter and in-process tests |
 | `chromium/patches/` | Minimal changes to three upstream files |
 | `chromium/version.json` | Exact upstream release and commit |

@@ -1,6 +1,10 @@
 # Implementation and validation status
 
-Recorded 2026-11-11. **No full Chromium checkout, native Aster compile, launch, installer or signed release has completed.**
+Recorded 2026-11-11.
+
+**Aster for Mac (WebKit, `mac/`)** is built for arm64 and x86_64 on a hosted macOS 15 runner. CI runs its XCTest unit tests and its `--self-test`, which launches the real app code, loads the bundled study tools with on-disk storage, and runs citation extraction in an isolated world. It also mounts and checks the `.dmg`. The app is ad-hoc signed, not notarized.
+
+**Chromium design:** no full Chromium checkout, native compile, launch, installer or signed release has completed. The rest of this page describes that design.
 
 ## Executed in this environment
 
