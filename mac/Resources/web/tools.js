@@ -5,7 +5,7 @@
 import {ResearchLibrary, mergeMissingFields} from './aster/research/library.mjs';
 import {BookmarkCollection} from './aster/research/bookmarks.mjs';
 import {Planner, toIcs, CATEGORIES, PRIORITIES} from './aster/study/planner.mjs';
-import {FlashcardCollection} from './aster/study/flashcards.mjs';
+import {FlashcardCollection, scheduleReview} from './aster/study/flashcards.mjs';
 import {parseDelimited, parseJsonRecords, inferColumns, numericColumn, describe, linearRegression} from './aster/data/dataset.mjs';
 import {renderChartSvg, tableToCsv, formatNumber} from './aster/data/chart.mjs';
 import {createBackup, readBackup, backupFileName} from './aster/storage/backup.mjs';
@@ -28,6 +28,7 @@ function h(tag, props = {}, ...children) {
     if (key === 'class') node.className = value;
     else if (key === 'text') node.textContent = value;
     else if (key === 'value') node.value = value;
+    else if (key === 'style') node.style.cssText = value; // CSSOM: allowed by the page's CSP, unlike style attributes
     else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
     else if (key in node && typeof value !== 'string') node[key] = value;
     else node.setAttribute(key, value === true ? '' : value);
@@ -110,74 +111,110 @@ function dayLabel(date) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'});
 }
 
-function agendaItem(item) {
+const longDate = (date = new Date()) => date.toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'});
+
+function viewHead(title, note) {
+  return h('div', {class: 'view-head'}, h('h1', {text: title}), note ? h('span', {class: 'note', text: note}) : null);
+}
+
+const PLUS = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9"/></svg>';
+function icon(svg) {
+  const holder = document.createElement('span');
+  holder.innerHTML = svg; // constant markup defined in this file, never user data
+  return holder.firstChild;
+}
+
+function agendaItem(item, {overdue = false} = {}) {
   const task = state.planner.get(item.taskId);
-  const toggle = h('input', {type: 'checkbox', checked: item.done, 'aria-label': `Done: ${item.title}`,
+  const toggle = h('input', {type: 'checkbox', class: `tick${overdue ? ' overdue' : ''}`, checked: item.done, 'aria-label': `Done: ${item.title}`,
     onchange: () => change('planner', () => (item.done ? state.planner.uncomplete(item.taskId, item.date) : state.planner.complete(item.taskId, item.date)))});
-  const meta = [item.time, item.category !== 'task' && item.category, item.course, task?.recurrence && `repeats ${task.recurrence.freq}`].filter(Boolean).join(' · ');
+  const meta = [overdue && dayLabel(item.date), item.time, item.course, task?.recurrence && `repeats ${task.recurrence.freq === 'daily' ? 'daily' : task.recurrence.freq === 'weekly' ? 'weekly' : 'monthly'}`]
+    .filter(Boolean).join(' · ');
+  const badge = item.priority === 'high' ? h('span', {class: 'badge high', text: 'High'})
+    : item.category !== 'task' ? h('span', {class: `badge${item.category === 'exam' ? ' exam' : ''}`, text: item.category[0].toUpperCase() + item.category.slice(1)}) : null;
   return h('li', {class: item.done ? 'done' : ''}, toggle,
-    h('div', {class: 'body'}, h('span', {class: 'title', text: item.title}),
-      item.priority === 'high' ? h('span', {class: 'badge high', text: 'high'}) : null,
-      meta ? h('div', {class: 'meta', text: meta}) : null),
+    h('div', {class: 'body'}, h('div', {class: 'title', text: item.title}), meta ? h('div', {class: 'meta', text: meta}) : null),
+    badge,
     h('button', {class: 'link danger', title: task?.recurrence ? 'Delete this task and all its repeats' : 'Delete task', 'aria-label': `Delete ${item.title}`, text: '✕',
       onclick: () => { if (!task?.recurrence || confirm(`Delete "${item.title}" and all its repeats?`)) change('planner', () => state.planner.remove(item.taskId)); }}));
 }
 
 function renderPlanner(root) {
-  const title = h('input', {placeholder: 'What needs doing?', required: true});
+  root.append(viewHead('Today', longDate()));
+  const title = h('input', {placeholder: 'Add a task…', 'aria-label': 'New task'});
   const due = h('input', {type: 'date', value: today()});
   const time = h('input', {type: 'time'});
   const category = select(CATEGORIES.map(value => [value, value[0].toUpperCase() + value.slice(1)]), 'task');
   const priority = select(PRIORITIES.map(value => [value, `${value[0].toUpperCase() + value.slice(1)} priority`]), 'normal');
   const repeat = select([['', 'Does not repeat'], ['daily', 'Every day'], ['weekly', 'Every week'], ['monthly', 'Every month']], '');
-  const course = h('input', {placeholder: 'Course (optional)'});
+  const course = h('input', {placeholder: 'Course, e.g. History HL'});
   const add = () => {
     if (!title.value.trim()) { title.focus(); return; }
-    change('planner', () => state.planner.add({id: shortId(), title: title.value, due: due.value, time: time.value || null,
+    change('planner', () => state.planner.add({id: shortId(), title: title.value, due: due.value || today(), time: time.value || null,
       category: category.value, priority: priority.value, course: course.value,
       recurrence: repeat.value ? {freq: repeat.value} : null}));
   };
   title.addEventListener('keydown', event => { if (event.key === 'Enter') add(); });
-  root.append(h('div', {class: 'card'},
-    h('div', {class: 'row'}, h('div', {class: 'grow'}, title)),
-    h('div', {class: 'row'}, h('div', {class: 'grow'}, due), h('div', {class: 'grow'}, time)),
-    h('div', {class: 'row'}, h('div', {class: 'grow'}, category), h('div', {class: 'grow'}, priority)),
-    h('div', {class: 'row'}, h('div', {class: 'grow'}, repeat), h('div', {class: 'grow'}, course)),
-    h('div', {class: 'row'}, h('button', {class: 'primary', text: 'Add', onclick: add}))));
+  const addButton = h('button', {class: 'primary icon-button', 'aria-label': 'Add task', title: 'Add task', onclick: add});
+  addButton.append(icon(PLUS));
+  root.append(h('div', {class: 'quick-add'}, title, addButton),
+    h('details', {class: 'more'}, h('summary', {text: 'Date, time and more'}),
+      h('div', {class: 'card'},
+        h('div', {class: 'row'}, h('label', {class: 'field grow'}, h('span', {text: 'Due'}), due), h('label', {class: 'field grow'}, h('span', {text: 'Time (optional)'}), time)),
+        h('div', {class: 'row'}, h('div', {class: 'grow'}, category), h('div', {class: 'grow'}, priority)),
+        h('div', {class: 'row'}, h('div', {class: 'grow'}, repeat), h('div', {class: 'grow'}, course)))));
 
   let agenda;
   try { agenda = state.planner.agenda(today(), {days: 14, lookbackDays: 30}); } catch (error) { showError(error); return; }
   if (agenda.overdue.length) {
-    root.append(h('h2', {text: 'Overdue'}), h('div', {class: 'card'}, h('ul', {class: 'items'}, agenda.overdue.map(agendaItem))));
+    root.append(h('h2', {class: 'danger'}, 'Overdue ', h('span', {class: 'count', text: agenda.overdue.length})),
+      h('div', {class: 'card flush'}, h('ul', {class: 'items'}, agenda.overdue.map(item => agendaItem(item, {overdue: true})))));
   }
-  root.append(h('h2', {text: 'Next 14 days'}));
-  if (!agenda.upcoming.length) root.append(h('div', {class: 'card empty', text: 'Nothing planned. Add a task above.'}));
+  if (!agenda.upcoming.length) root.append(h('div', {class: 'card empty', text: 'Nothing planned for the next two weeks. Add a task above.'}));
+  // Repeating tasks appear today and tomorrow, then only their next
+  // occurrence, so a daily task doesn't fill every day for two weeks.
+  const tomorrow = localDate(new Date(Date.now() + 86400000));
+  const shownLater = new Set();
   const byDate = new Map();
-  for (const item of agenda.upcoming) byDate.set(item.date, [...(byDate.get(item.date) || []), item]);
-  for (const [date, items] of byDate) root.append(h('div', {class: 'card'}, h('strong', {text: dayLabel(date)}), h('ul', {class: 'items'}, items.map(agendaItem))));
-  root.append(h('div', {class: 'row'}, h('button', {text: 'Export to Calendar (.ics)…', disabled: !state.planner.tasks.length, onclick: async () => {
-    try {
-      const text = toIcs(state.planner.tasks, {now: nowIso(), calendarName: 'Aster Planner'});
-      if (!text.includes('BEGIN:VEVENT')) { toast('Every task is already done, so there is nothing to export.', {error: true}); return; }
-      const saved = await bridge.call('saveFile', {suggestedName: 'aster-planner.ics', text});
-      if (saved) toast('Calendar file saved. Open it to add the tasks to Calendar.');
-    } catch (error) { showError(error); }
-  }})));
+  for (const item of agenda.upcoming) {
+    if (item.date > tomorrow && state.planner.get(item.taskId)?.recurrence) {
+      if (shownLater.has(item.taskId)) continue;
+      shownLater.add(item.taskId);
+    }
+    byDate.set(item.date, [...(byDate.get(item.date) || []), item]);
+  }
+  for (const [date, items] of byDate) {
+    root.append(h('h2', {text: dayLabel(date)}), h('div', {class: 'card flush'}, h('ul', {class: 'items'}, items.map(item => agendaItem(item)))));
+  }
+  if (state.planner.tasks.length) {
+    root.append(h('div', {class: 'row'}, h('button', {class: 'link', text: 'Export to Calendar (.ics)…', onclick: async () => {
+      try {
+        const text = toIcs(state.planner.tasks, {now: nowIso(), calendarName: 'Aster Planner'});
+        if (!text.includes('BEGIN:VEVENT')) { toast('Every task is already done, so there is nothing to export.', {error: true}); return; }
+        const saved = await bridge.call('saveFile', {suggestedName: 'aster-planner.ics', text});
+        if (saved) toast('Calendar file saved. Open it to add the tasks to Calendar.');
+      } catch (error) { showError(error); }
+    }})));
+  }
 }
 
 // ---- Flashcards --------------------------------------------------------------
+const intervalText = days => (days <= 1 ? '1 day' : days < 30 ? `${days} days` : days < 365 ? `${Math.round(days / 30)} mo` : `${Math.round(days / 365)} yr`);
+
 function renderCards(root) {
   const decks = state.flashcards.decks;
   const deck = state.filters.deck && decks.includes(state.filters.deck) ? state.filters.deck : undefined;
   if (state.study) return renderStudy(root);
   const stats = state.flashcards.stats(today(), {deck});
+  root.append(viewHead('Flashcards', `${stats.due} due`));
   const deckSelect = select([['', 'All decks'], ...decks.map(name => [name, name])], deck || '');
+  deckSelect.setAttribute('aria-label', 'Deck');
   deckSelect.addEventListener('change', () => { state.filters.deck = deckSelect.value || undefined; render('cards'); });
   root.append(h('div', {class: 'card'},
-    h('div', {class: 'row'}, h('div', {class: 'grow'}, deckSelect)),
-    h('p', {class: 'note', text: `${stats.total} cards · ${stats.due} due · ${stats.learned} learned${stats.retention === null ? '' : ` · ${Math.round(stats.retention * 100)}% recalled`}`}),
+    decks.length > 1 ? h('div', {class: 'row'}, h('div', {class: 'grow'}, deckSelect)) : null,
+    h('p', {class: 'note', text: `${stats.total} cards · ${stats.learned} learned${stats.retention === null ? '' : ` · ${Math.round(stats.retention * 100)}% remembered`}`}),
     h('button', {class: 'primary', disabled: !stats.due, text: stats.due ? `Study now (${stats.due} due)` : 'Nothing due today',
-      onclick: () => { state.study = {deck, revealed: false}; render('cards'); }})));
+      onclick: () => { state.study = {deck, revealed: false, done: 0, total: stats.due}; render('cards'); }})));
 
   const front = h('textarea', {placeholder: 'Question'});
   const back = h('textarea', {placeholder: 'Answer'});
@@ -193,7 +230,7 @@ function renderCards(root) {
   const header = h('input', {type: 'checkbox'});
   root.append(h('h2', {text: 'Import'}), h('div', {class: 'card'},
     h('p', {class: 'note', text: 'A CSV or TSV file with the question in the first column and the answer in the second.'}),
-    h('label', {class: 'row'}, header, 'First row is a header'),
+    h('label', {class: 'check'}, header, 'First row is a header'),
     h('button', {text: 'Import from file…', onclick: async () => {
       try {
         const file = await bridge.call('openFile', {types: ['csv', 'tsv', 'txt']});
@@ -207,23 +244,41 @@ function renderCards(root) {
 }
 
 function renderStudy(root) {
-  const [card] = state.flashcards.due(today(), {deck: state.study.deck, limit: 1});
+  const study = state.study;
+  const [card] = state.flashcards.due(today(), {deck: study.deck, limit: 1});
+  const total = Math.max(study.total || 0, study.done + (card ? 1 : 0));
+  root.append(viewHead(study.deck || 'Study', card ? `${study.done + 1} of ${total}` : 'Finished'),
+    h('div', {class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(total), 'aria-valuenow': String(study.done)},
+      h('div', {style: `width: ${total ? Math.round((study.done / total) * 100) : 100}%`})));
   if (!card) {
-    root.append(h('div', {class: 'card study'}, h('p', {class: 'face', text: 'All done for now 🎉'}),
-      h('button', {class: 'primary', text: 'Back to cards', onclick: () => { state.study = null; render('cards'); }})));
+    root.append(h('div', {class: 'card study'}, h('p', {class: 'face', text: 'All done for now'}),
+      h('p', {class: 'note', text: `You reviewed ${study.done} card(s). Come back when more are due.`})),
+    h('button', {class: 'primary', text: 'Back to cards', onclick: () => { state.study = null; render('cards'); }}));
     return;
   }
-  const grade = value => change('flashcards', () => { state.flashcards.review(card.id, value, today()); state.study.revealed = false; });
+  const grade = value => change('flashcards', () => {
+    state.flashcards.review(card.id, value, today());
+    study.revealed = false;
+    study.done += 1;
+  });
   root.append(h('div', {class: 'card study'},
-    h('div', {class: 'note', text: card.deck}),
     h('div', {class: 'face', text: card.front}),
-    state.study.revealed ? h('div', {class: 'face answer', text: card.back}) : null,
-    state.study.revealed
-      ? h('div', {class: 'grades'}, [['Again', 1], ['Hard', 3], ['Good', 4], ['Easy', 5]].map(([text, value]) => h('button', {text, onclick: () => grade(value)})))
-      : h('button', {class: 'primary', text: 'Show answer', onclick: () => { state.study.revealed = true; render('cards'); }})),
-  h('div', {class: 'row'},
-    h('button', {text: 'Stop studying', onclick: () => { state.study = null; render('cards'); }}),
-    h('button', {class: 'danger', text: 'Delete card', onclick: () => { if (confirm('Delete this card?')) change('flashcards', () => state.flashcards.remove(card.id)); }})));
+    study.revealed ? h('div', {class: 'face answer', text: card.back}) : null));
+  if (study.revealed) {
+    const grades = [['Again', 1, 'again'], ['Hard', 3, 'hard'], ['Good', 4, 'good'], ['Easy', 5, 'easy']]
+      .map(([text, value, kind]) => ({text, value, kind, next: scheduleReview(card, value, today()).interval}));
+    // A brand-new card comes back tomorrow whatever the grade, so only show
+    // the next-review time when the choices actually differ.
+    const differ = new Set(grades.map(item => item.next)).size > 1;
+    root.append(h('p', {class: 'note', style: 'text-align: center', text: 'How well did you remember it?'}),
+      h('div', {class: 'grades'}, grades.map(item => h('button', {class: item.kind, title: `Next review in ${intervalText(item.next)}`, onclick: () => grade(item.value)},
+        item.text, differ ? h('small', {text: intervalText(item.next)}) : null))));
+  } else {
+    root.append(h('div', {class: 'row'}, h('button', {class: 'primary grow', text: 'Show answer', onclick: () => { study.revealed = true; render('cards'); }})));
+  }
+  root.append(h('div', {class: 'row'},
+    h('button', {class: 'link', text: 'Stop studying', onclick: () => { state.study = null; render('cards'); }}),
+    h('button', {class: 'link danger', text: 'Delete card', onclick: () => { if (confirm('Delete this card?')) change('flashcards', () => state.flashcards.remove(card.id)); }})));
 }
 
 // ---- Research library ------------------------------------------------------
@@ -350,7 +405,8 @@ function sourceItem(source) {
 }
 
 function renderLibrary(root) {
-  root.append(h('div', {class: 'row'}, h('button', {class: 'primary', text: 'Cite current page', onclick: citeCurrentPage})));
+  root.append(viewHead('Library', `${state.library.size} source${state.library.size === 1 ? '' : 's'}`),
+    h('div', {class: 'row'}, h('button', {class: 'primary', text: 'Cite current page', onclick: citeCurrentPage}), h('span', {class: 'note', text: 'or press ⌥⌘C'})));
   if (state.review) renderReview(root);
 
   const f = state.filters;
@@ -421,6 +477,7 @@ function drawChart(type, xName, yName, title) {
 }
 
 function renderData(root) {
+  root.append(viewHead('Data', 'Statistics and charts'));
   const paste = h('textarea', {placeholder: 'Paste CSV, TSV or JSON here'});
   root.append(h('div', {class: 'card'},
     h('div', {class: 'row'}, h('button', {class: 'primary', text: 'Open file…', onclick: async () => {
@@ -490,23 +547,34 @@ function renderBookmarkEditor(root) {
       h('button', {text: 'Cancel', onclick: () => { state.editBookmark = null; render('bookmarks'); }}))));
 }
 
+const MONOGRAM_COLORS = [['var(--good-soft)', 'var(--good)'], ['var(--blue-soft)', 'var(--blue)'], ['var(--accent-soft)', 'var(--accent-strong)'],
+  ['var(--amber-soft)', 'var(--amber)'], ['var(--danger-soft)', 'var(--danger)'], ['var(--segment)', 'var(--text)']];
+function monogram(text) {
+  const label = text.replace(/^www\./, '');
+  let hash = 0;
+  for (const char of label) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
+  const [bg, fg] = MONOGRAM_COLORS[hash % MONOGRAM_COLORS.length];
+  return h('span', {class: 'monogram', 'aria-hidden': 'true', style: `background: ${bg}; color: ${fg}`, text: (label[0] || '?').toUpperCase()});
+}
+
 function renderBookmarks(root) {
   const f = state.filters;
   const folders = state.bookmarks.folders;
   if (f.bmFolder && f.bmFolder !== '*' && !folders.some(folder => folder.id === f.bmFolder)) f.bmFolder = '*';
-  root.append(h('div', {class: 'row'}, h('button', {class: 'primary', text: 'Bookmark current page', onclick: bookmarkCurrentPage}),
-    h('span', {class: 'note', text: 'or press ⌘D'})));
+  const head = viewHead('Bookmarks');
+  head.append(h('button', {class: 'primary', text: 'Bookmark this page', title: 'Bookmark the page you are viewing (⌘D)', onclick: bookmarkCurrentPage}));
+  root.append(head);
   if (state.editBookmark) renderBookmarkEditor(root);
 
-  const folderSelect = select([['*', 'All bookmarks'], ['', 'Unfiled'], ...folders.map(folder => [folder.id, folder.name])], f.bmFolder ?? '*');
-  folderSelect.addEventListener('change', () => { f.bmFolder = folderSelect.value; render('bookmarks'); });
+  const current = f.bmFolder ?? '*';
+  const chip = (id, label) => h('button', {'aria-pressed': String(current === id), text: label, onclick: () => { f.bmFolder = id; render('bookmarks'); }});
+  const chips = h('div', {class: 'chips', role: 'group', 'aria-label': 'Folders'},
+    chip('*', 'All'), folders.map(folder => chip(folder.id, folder.name)), chip('', 'Unfiled'));
   const search = h('input', {type: 'search', placeholder: 'Search bookmarks', value: f.bmText || ''});
   search.addEventListener('input', () => { f.bmText = search.value; renderBookmarkList(); });
   const newFolder = h('input', {placeholder: 'New folder name'});
   const selected = f.bmFolder && f.bmFolder !== '*' ? folders.find(folder => folder.id === f.bmFolder) : null;
-  root.append(h('div', {class: 'card'},
-    h('div', {class: 'row'}, h('div', {class: 'grow'}, folderSelect)),
-    h('div', {class: 'row'}, h('div', {class: 'grow'}, search)),
+  root.append(h('div', {class: 'row'}, h('div', {class: 'grow'}, search)), chips, h('div', {class: 'card'},
     selected ? h('div', {class: 'row'},
       h('button', {class: 'link', text: 'Rename folder', onclick: () => {
         const name = prompt('Folder name', selected.name);
@@ -521,7 +589,7 @@ function renderBookmarks(root) {
       if (newFolder.value.trim()) change('bookmarks', () => { state.bookmarks.addFolder({id: shortId(), name: newFolder.value}); toast('Folder added. Use Edit on a bookmark to move it there.'); });
     }}))));
 
-  const listCard = h('div', {class: 'card', id: 'bookmark-list'});
+  const listCard = h('div', {class: 'card flush', id: 'bookmark-list'});
   root.append(listCard);
   function renderBookmarkList() {
     const query = {};
@@ -531,9 +599,9 @@ function renderBookmarks(root) {
     listCard.replaceChildren(items.length ? h('ul', {class: 'items'}, items.map(bookmark => {
       let host = '';
       try { host = new URL(bookmark.url).hostname; } catch { /* stored URLs are validated */ }
-      return h('li', {},
+      return h('li', {}, monogram(host || bookmark.title),
         h('div', {class: 'body'},
-          h('button', {class: 'link', text: bookmark.title, title: bookmark.url, onclick: () => bridge.call('openURL', {url: bookmark.url}).catch(showError)}),
+          h('button', {class: 'link title', text: bookmark.title, title: bookmark.url, onclick: () => bridge.call('openURL', {url: bookmark.url}).catch(showError)}),
           h('div', {class: 'meta', text: [host, bookmark.folderId && folderName(bookmark.folderId)].filter(Boolean).join(' · ')}),
           h('div', {class: 'row'},
             h('button', {class: 'link', text: 'Edit', onclick: () => { state.editBookmark = bookmark.id; render('bookmarks'); window.scrollTo(0, 0); }}),
@@ -562,6 +630,7 @@ function renderBookmarks(root) {
 
 // ---- Backup --------------------------------------------------------------------
 function renderBackup(root) {
+  root.append(viewHead('Backup'));
   const counts = `${state.library.size} sources, ${state.planner.tasks.length} tasks, ${state.flashcards.toJSON().cards.length} cards, ${state.bookmarks.size} bookmarks`;
   if (state.locked.size) root.append(h('div', {class: 'warn', text: `Locked because it could not be read: ${[...state.locked].join(', ')}. Restore a backup to fix this.`}));
   root.append(h('div', {class: 'card'},
