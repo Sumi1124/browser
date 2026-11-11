@@ -1,0 +1,11 @@
+{
+  "name": "aster-browser-research-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/research.test.mjs",
+    "test:browser": "node --test tests/metadata.browser.test.mjs"
+  },
+  "devDependencies": { "playwright-core": "1.58.2" },
+  "engines": { "node": ">=22" }
+}

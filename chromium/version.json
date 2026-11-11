@@ -1,0 +1,10 @@
+{
+  "version": "157.0.8103.50",
+  "revision": "049750111b1e5c11565c792b2aeed5541f332bad",
+  "channel": "Stable",
+  "checked_at": "2026-11-11",
+  "source": "https://github.com/chromium/chromium",
+  "checkout_source": "https://chromium.googlesource.com/chromium/src.git",
+  "stable_feed": "https://raw.githubusercontent.com/GoogleChromeLabs/chrome-for-testing/gh-pages/last-known-good-versions.json",
+  "feed_timestamp": "2026-11-10T21:12:23.057Z"
+}

@@ -1,0 +1,14 @@
+# This directory is copied to //aster in the pinned Chromium checkout.
+source_set("core") {
+  sources = [
+    "core/search.cc",
+    "core/search.h",
+    "core/workspace.cc",
+    "core/workspace.h",
+  ]
+}
+executable("aster_core_tests") {
+  testonly = true
+  sources = [ "tests/core_test.cc" ]
+  deps = [ ":core" ]
+}

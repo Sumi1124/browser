@@ -1,0 +1,5 @@
+{
+  "chrome/browser/ui/views/toolbar/toolbar_view.cc": "b2dcb9c7e05b9005a1286993c1854d244319bec49851850bcddd599bf8bdc696",
+  "chrome/browser/ui/views/toolbar/BUILD.gn": "bcf766b79fa55cacfb56954dad2c062f7c22b13aea8bb4ea9eddfce6d95a10ad",
+  "chrome/browser/prefs/browser_prefs.cc": "77df49bfffa7c5e53c5e44eb0a6713d65041c13dd29a429ee078de0ccfba0acd"
+}
