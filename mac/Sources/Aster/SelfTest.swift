@@ -139,5 +139,22 @@ enum SelfTest {
         try check(hit.0 && hit.1 == 2, "find in page finds visible matches, ignoring case (\(hit.1) matches)")
         let miss = await search("zebra")
         try check(!miss.0 && miss.1 == 0, "find in page reports no match")
+
+        // 4. A real browser window: the sidebar and find bar get their space.
+        let browser = BrowserWindowController.open(context: .makePrivate(), url: URL(string: "about:blank"))
+        browser.window?.setContentSize(NSSize(width: 1100, height: 700))
+        browser.setToolsVisible(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let widths = browser.layoutWidths
+        try check(widths.tools >= 300 && widths.page >= 600, "sidebar opens beside the page (page \(Int(widths.page)) pt, sidebar \(Int(widths.tools)) pt)")
+        let pageTop = browser.pane.webView.frame.minY
+        browser.findBar.show()
+        browser.window?.contentView?.layoutSubtreeIfNeeded()
+        let shifted = browser.pane.webView.frame.minY - pageTop
+        try check(browser.findBar.isVisible && shifted >= 20, "find bar appears above the page (\(Int(shifted)) pt)")
+        browser.findBar.close(nil)
+        browser.window?.contentView?.layoutSubtreeIfNeeded()
+        try check(browser.pane.webView.frame.minY == pageTop, "find bar closes and the page takes the space back")
+        browser.window?.close()
     }
 }

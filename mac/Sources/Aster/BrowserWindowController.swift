@@ -93,19 +93,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     private func buildContent() {
         split.isVertical = true
         split.dividerStyle = .thin
-        // The find bar sits above the page and is hidden until ⌘F.
-        let page = NSStackView(views: [findBar.view, pane.webView])
-        page.orientation = .vertical
-        page.spacing = 0
-        page.alignment = .leading
-        page.detachesHiddenViews = true
-        pane.webView.translatesAutoresizingMaskIntoConstraints = false
-        findBar.view.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            pane.webView.widthAnchor.constraint(equalTo: page.widthAnchor),
-            findBar.view.widthAnchor.constraint(equalTo: page.widthAnchor),
-        ])
-        split.addArrangedSubview(page)
+        // The find bar sits above the page and is hidden until ⌘F. Laid out by
+        // hand so it never competes with the split view's own sizing.
+        split.addArrangedSubview(PageContainer(findBar: findBar.view, page: pane.webView))
         split.addArrangedSubview(tools.webView)
         split.setHoldingPriority(.defaultLow, forSubviewAt: 0)
         split.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
@@ -153,6 +143,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
             item.action = action
             item.isBordered = true
             item.autovalidates = false
+            // Keep the sidebar, star and history buttons out of the » overflow on small screens.
+            if [.tools, .bookmark, .back, .forward].contains(identifier) { item.visibilityPriority = .high }
             self.toolbarButtons[identifier] = item
             return item
         }
@@ -178,7 +170,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
             addressField.target = self
             addressField.action = #selector(addressEntered(_:))
             addressField.translatesAutoresizingMaskIntoConstraints = false
-            let wide = addressField.widthAnchor.constraint(equalToConstant: 640)
+            let wide = addressField.widthAnchor.constraint(equalToConstant: 520)
             wide.priority = .defaultLow
             NSLayoutConstraint.activate([wide, addressField.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
                                          addressField.widthAnchor.constraint(lessThanOrEqualToConstant: 900)])
@@ -342,6 +334,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         tools.show(view: view)
     }
 
+    /// Widths of the page and the sidebar, for the self-test.
+    var layoutWidths: (page: CGFloat, tools: CGFloat) {
+        split.layoutSubtreeIfNeeded()
+        return (split.arrangedSubviews[0].frame.width, tools.webView.isHidden ? 0 : tools.webView.frame.width)
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(goBack(_:)): return pane.webView.canGoBack
@@ -386,5 +384,32 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         pane.onChange = nil
         if let dataObserver { NotificationCenter.default.removeObserver(dataObserver) }
         Self.all.removeAll { $0 === self }
+    }
+}
+
+/// Puts the find bar (when shown) above the web page.
+final class PageContainer: NSView {
+    private let findBar: NSView
+    private let page: NSView
+
+    init(findBar: NSView, page: NSView) {
+        self.findBar = findBar
+        self.page = page
+        super.init(frame: .zero)
+        findBar.translatesAutoresizingMaskIntoConstraints = true
+        page.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(page)
+        addSubview(findBar)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let barHeight = findBar.isHidden ? 0 : ceil(findBar.fittingSize.height)
+        findBar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: barHeight)
+        page.frame = NSRect(x: 0, y: barHeight, width: bounds.width, height: max(0, bounds.height - barHeight))
     }
 }

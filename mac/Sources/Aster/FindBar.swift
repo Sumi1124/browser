@@ -53,6 +53,7 @@ final class FindBar: NSObject, NSSearchFieldDelegate {
 
     func show() {
         view.isHidden = false
+        view.superview?.needsLayout = true
         view.window?.makeFirstResponder(field)
         field.currentEditor()?.selectAll(nil)
         if !field.stringValue.isEmpty { search(backwards: false) }
@@ -60,6 +61,7 @@ final class FindBar: NSObject, NSSearchFieldDelegate {
 
     @objc func close(_ sender: Any?) {
         view.isHidden = true
+        view.superview?.needsLayout = true
         status.stringValue = ""
         if let webView {
             // Searching for an empty string clears WebKit's highlight.
