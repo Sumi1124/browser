@@ -10,6 +10,8 @@ No native binaries or installers exist from this run. The included automated rel
 2. Merge to `main`. Then either open **Actions → Release → Run workflow** on `main`, which creates the `v<version>` tag on the tested commit, or push the tag yourself: `git tag v0.2.0 && git push origin v0.2.0`.
 3. The workflow checks that the tag matches `package.json` and runs every test. It then builds `aster-modules-<version>.zip` with `scripts/package_modules.py` (a reproducible archive with its own README), builds the source archives, and writes `SHA256SUMS.txt`. Finally it unzips the package and re-runs its tests and demo in isolation before publishing.
 
+Releases are published as the repository's **latest** release, so the README's `releases/latest` download link always points to the newest one. An older pre-release can be promoted with **Actions → Promote release → Run workflow** (enter its tag).
+
 To build the zip locally, run `npm run package`; it writes to `work/dist/`. These releases contain JavaScript modules and source only, never a browser binary.
 
 ## Infrastructure
