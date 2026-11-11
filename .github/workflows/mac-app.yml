@@ -1,0 +1,54 @@
+name: Mac app
+# Builds, unit-tests and self-tests the WebKit Mac app on a hosted Mac, and
+# uploads the .dmg and a screenshot as workflow artifacts.
+on:
+  push:
+    paths: ['mac/**', 'aster/**', 'package.json', '.github/workflows/mac-app.yml']
+  pull_request:
+    paths: ['mac/**', 'aster/**', 'package.json', '.github/workflows/mac-app.yml']
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+      - name: Unit tests (AsterKit)
+        working-directory: mac
+        run: swift test
+      - name: Build Aster.app and DMG
+        run: bash mac/build.sh work/dist
+      - name: Self-test the built app
+        run: mac/.build/stage/Aster.app/Contents/MacOS/Aster --self-test
+      - name: Check the DMG contents
+        run: |
+          mount="$(mktemp -d)"
+          hdiutil attach work/dist/Aster-*.dmg -mountpoint "$mount" -nobrowse -readonly
+          ls -la "$mount"
+          test -x "$mount/Aster.app/Contents/MacOS/Aster"
+          test -L "$mount/Applications"
+          test -f "$mount/Aster.app/Contents/Resources/web/aster/research/metadata.mjs"
+          codesign --verify --strict "$mount/Aster.app"
+          hdiutil detach "$mount"
+      - name: Screenshot
+        continue-on-error: true
+        run: |
+          open -n mac/.build/stage/Aster.app --args --open https://en.wikipedia.org/wiki/Aster_(plant) --show-tools
+          sleep 15
+          screencapture -x work/screenshot.png
+          pkill -x Aster || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aster-mac
+          path: |
+            work/dist/Aster-*.dmg
+            work/screenshot.png
+          if-no-files-found: warn

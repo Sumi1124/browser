@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Aster</string>
+	<key>CFBundleExecutable</key>
+	<string>Aster</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.aster.browser</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Aster</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Web site URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>http</string>
+				<string>https</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSFileQuarantineEnabled</key>
+	<true/>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Aster contributors. BSD-3-Clause. Uses Apple WebKit.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Websites you visit can ask to use your camera, for example for video calls.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Websites you visit can ask to use your microphone, for example for video calls.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Websites you visit can ask for your location, for example to show nearby results.</string>
+</dict>
+</plist>
