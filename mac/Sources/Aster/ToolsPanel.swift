@@ -234,6 +234,7 @@ private final class WeakReplyHandler: NSObject, WKScriptMessageHandlerWithReply 
     }
 }
 
+@MainActor
 extension WKWebView {
     /// callAsyncJavaScript as an async function.
     func runJavaScript(_ body: String, arguments: [String: Any] = [:], in world: WKContentWorld = .page) async throws -> Any? {

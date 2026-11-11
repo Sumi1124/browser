@@ -51,6 +51,6 @@ final class DownloadManager: NSObject, WKDownloadDelegate {
         let alert = NSAlert()
         alert.messageText = "Download failed"
         alert.informativeText = error.localizedDescription
-        if let window = NSApp.keyWindow { alert.beginSheetModal(for: window) } else { alert.runModal() }
+        if let window = NSApp.keyWindow { alert.beginSheetModal(for: window, completionHandler: nil) } else { alert.runModal() }
     }
 }

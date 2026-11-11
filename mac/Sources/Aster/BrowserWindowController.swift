@@ -245,7 +245,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
                 let alert = NSAlert()
                 alert.messageText = "Can't cite this page"
                 alert.informativeText = error.localizedDescription
-                if let window { alert.beginSheetModal(for: window) } else { alert.runModal() }
+                if let window { alert.beginSheetModal(for: window, completionHandler: nil) } else { alert.runModal() }
             }
         }
     }
