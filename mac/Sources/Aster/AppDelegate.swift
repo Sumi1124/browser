@@ -4,7 +4,7 @@ import AsterKit
 import WebKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDelegate {
     static var shared: AppDelegate { NSApp.delegate as! AppDelegate }
     private var launched = false
     private var pendingURLs: [URL] = []
@@ -113,6 +113,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// Used when no browser window is in front; windows handle it themselves otherwise.
+    @IBAction func openBookmark(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        BrowserWindowController.open(context: currentContext, url: url)
+    }
+
+    // MARK: Bookmarks menu
+
+    private static let fixedBookmarkItems = 3
+    private static let maxBookmarkItems = 300
+
+    /// Rebuilt every time the Bookmarks menu opens, so it always matches the file.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        while menu.items.count > Self.fixedBookmarkItems { menu.removeItem(at: Self.fixedBookmarkItems) }
+        let contents: BookmarkFile.Contents
+        do {
+            contents = try BookmarkFile(store: ToolsHub.shared.store).read()
+        } catch {
+            menu.addItem(NSMenuItem(title: "Bookmarks can't be read", action: nil, keyEquivalent: ""))
+            return
+        }
+        if contents.bookmarks.isEmpty {
+            menu.addItem(NSMenuItem(title: "No Bookmarks", action: nil, keyEquivalent: ""))
+            return
+        }
+        var budget = Self.maxBookmarkItems
+        func entry(_ bookmark: BookmarkFile.Bookmark) -> NSMenuItem {
+            let title = bookmark.title.count > 60 ? String(bookmark.title.prefix(59)) + "…" : bookmark.title
+            let item = NSMenuItem(title: title, action: #selector(openBookmark(_:)), keyEquivalent: "")
+            item.representedObject = bookmark.url
+            item.toolTip = bookmark.url.absoluteString
+            return item
+        }
+        let folderIds = Set(contents.folders.map(\.id))
+        for folder in contents.folders {
+            let items = contents.bookmarks.filter { $0.folderId == folder.id }
+            let submenu = NSMenu(title: folder.name)
+            for bookmark in items.prefix(budget) { submenu.addItem(entry(bookmark)) }
+            budget -= min(budget, items.count)
+            if items.isEmpty { submenu.addItem(NSMenuItem(title: "Empty", action: nil, keyEquivalent: "")) }
+            let holder = NSMenuItem(title: folder.name, action: nil, keyEquivalent: "")
+            holder.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+            holder.submenu = submenu
+            menu.addItem(holder)
+        }
+        let unfiled = contents.bookmarks.filter { $0.folderId == nil || !folderIds.contains($0.folderId!) }
+        if !contents.folders.isEmpty && !unfiled.isEmpty { menu.addItem(.separator()) }
+        for bookmark in unfiled.prefix(budget) { menu.addItem(entry(bookmark)) }
+        if contents.bookmarks.count > Self.maxBookmarkItems {
+            menu.addItem(.separator())
+            menu.addItem(NSMenuItem(title: "More in Study Tools…", action: #selector(BrowserWindowController.showBookmarks(_:)), keyEquivalent: ""))
+        }
+    }
+
     @IBAction func showHelp(_ sender: Any?) {
         BrowserWindowController.open(context: currentContext, url: URL(string: "https://github.com/Sumi1124/browser#readme"))
     }
@@ -185,6 +239,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item("Copy", #selector(NSText.copy(_:)), "c"),
             item("Paste", #selector(NSText.paste(_:)), "v"),
             item("Select All", #selector(NSText.selectAll(_:)), "a"),
+            .separator(),
+            item("Find…", #selector(BrowserWindowController.showFindBar(_:)), "f"),
+            item("Find Next", #selector(BrowserWindowController.asterFindNext(_:)), "g"),
+            item("Find Previous", #selector(BrowserWindowController.asterFindPrevious(_:)), "g", [.command, .shift]),
         ])
         submenu("View", [
             item("Reload Page", #selector(BrowserWindowController.reloadPage(_:)), "r"),
@@ -201,6 +259,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item("Back", #selector(BrowserWindowController.goBack(_:)), "["),
             item("Forward", #selector(BrowserWindowController.goForward(_:)), "]"),
         ])
+        submenu("Bookmarks", [
+            item("Bookmark This Page", #selector(BrowserWindowController.toggleBookmark(_:)), "d"),
+            item("Show All Bookmarks", #selector(BrowserWindowController.showBookmarks(_:)), "b", [.command, .option]),
+            .separator(),
+        ])
+        main.item(withTitle: "Bookmarks")?.submenu?.delegate = self
         submenu("Study", [
             item("Cite This Page", #selector(BrowserWindowController.citeThisPage(_:)), "c", [.command, .option]),
             .separator(),

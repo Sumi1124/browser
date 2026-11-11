@@ -49,7 +49,13 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler {
 protocol ToolsPanelOwner: AnyObject {
     var hostWindow: NSWindow? { get }
     func extractCitation() async throws -> [String: Any]
+    func currentPage() throws -> [String: Any]
     func openInNewTab(_ url: URL)
+}
+
+extension Notification.Name {
+    /// Posted after study-tools data is saved; userInfo["key"] names the module.
+    static let asterToolsDataDidChange = Notification.Name("AsterToolsDataDidChange")
 }
 
 struct ToolsError: LocalizedError {
@@ -79,11 +85,13 @@ final class ToolsHub {
     }
 
     /// Tells every other open panel to reload a module after it changed.
-    func didSave(_ key: String, from source: ToolsPanel) {
+    /// `source` is the panel that saved, or nil when native code saved.
+    func didSave(_ key: String, from source: ToolsPanel?) {
         for case let panel? in panels.map(\.panel) where panel !== source {
             panel.webView.callAsyncJavaScript("if (window.asterTools) await window.asterTools.reload(key);",
                                               arguments: ["key": key], in: nil, in: .page, completionHandler: nil)
         }
+        NotificationCenter.default.post(name: .asterToolsDataDidChange, object: nil, userInfo: ["key": key])
     }
 
     static var webRoot: URL {
@@ -94,7 +102,7 @@ final class ToolsHub {
 /// The study-tools sidebar: a WKWebView showing the bundled tools page,
 /// with a narrow message bridge for storage and file dialogs.
 @MainActor
-final class ToolsPanel: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegate {
+final class ToolsPanel: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegate, WKUIDelegate {
     let webView: WKWebView
     weak var owner: ToolsPanelOwner?
     private static let schemeHandler = AppSchemeHandler(root: ToolsHub.webRoot)
@@ -112,6 +120,7 @@ final class ToolsPanel: NSObject, WKScriptMessageHandlerWithReply, WKNavigationD
         // forwarder avoids WebKit keeping this panel (and its window) alive.
         webView.configuration.userContentController.addScriptMessageHandler(WeakReplyHandler(self), contentWorld: .page, name: "aster")
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         ToolsHub.shared.register(self)
     }
 
@@ -132,6 +141,47 @@ final class ToolsPanel: NSObject, WKScriptMessageHandlerWithReply, WKNavigationD
                  decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
         let scheme = action.request.url?.scheme?.lowercased()
         decisionHandler(scheme == AppSchemeHandler.scheme || scheme == "blob" ? .allow : .cancel)
+    }
+
+    // MARK: JavaScript dialogs
+    // Without these, WebKit silently answers confirm() with "Cancel", so
+    // "Delete this card?" would never delete anything.
+
+    /// Self-test only: answer dialogs without showing them.
+    static var autoAnswerDialogs = false
+
+    private func runDialog(_ message: String, buttons: [String], field: NSTextField? = nil,
+                           completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        if Self.autoAnswerDialogs { completion(.alertFirstButtonReturn); return }
+        let alert = NSAlert()
+        alert.messageText = String(message.prefix(2000))
+        buttons.forEach { alert.addButton(withTitle: $0) }
+        alert.accessoryView = field
+        if let window = owner?.hostWindow ?? webView.window {
+            alert.beginSheetModal(for: window, completionHandler: completion)
+            if let field { alert.window.initialFirstResponder = field }
+        } else {
+            completion(alert.runModal())
+        }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping @MainActor @Sendable () -> Void) {
+        runDialog(message, buttons: ["OK"]) { _ in completionHandler() }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping @MainActor @Sendable (Bool) -> Void) {
+        runDialog(message, buttons: ["OK", "Cancel"]) { completionHandler($0 == .alertFirstButtonReturn) }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor @Sendable (String?) -> Void) {
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.stringValue = defaultText ?? ""
+        runDialog(prompt, buttons: ["OK", "Cancel"], field: field) {
+            completionHandler($0 == .alertFirstButtonReturn ? field.stringValue : nil)
+        }
     }
 
     // MARK: Bridge
@@ -175,6 +225,9 @@ final class ToolsPanel: NSObject, WKScriptMessageHandlerWithReply, WKNavigationD
         case "citeCurrentPage":
             guard let owner else { throw ToolsError(message: "Open a web page first, then cite it.") }
             return try await owner.extractCitation()
+        case "currentPage":
+            guard let owner else { throw ToolsError(message: "Open a web page first.") }
+            return try owner.currentPage()
         case "openURL":
             guard let url = URL(string: try string(body, "url")), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                 throw ToolsError(message: "Only web links can be opened.")
@@ -198,7 +251,7 @@ final class ToolsPanel: NSObject, WKScriptMessageHandlerWithReply, WKNavigationD
     }
 
     private func openFile(types: [String]) async throws -> Any {
-        let allowed = Set(["csv", "tsv", "txt", "json"])
+        let allowed = Set(["csv", "tsv", "txt", "json", "html", "htm"])
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false

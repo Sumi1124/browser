@@ -67,6 +67,21 @@ Free functions: `sanitizeMetadata`, `mergeMissingFields(existing, incoming)` →
 - **URL:** an exact match after ignoring the scheme, `www.`, the fragment, `utm_*`/`fbclid`/`gclid`-style tracking parameters, parameter order and a trailing slash.
 - **Title:** reported only as a *likely* duplicate. It needs a normalized title of at least 12 characters plus the same year and the same first-author surname.
 
+## Bookmarks: `aster/research/bookmarks.mjs`
+
+`BookmarkCollection` holds bookmarks with one level of folders. The Mac app's native code (⌘D and the Bookmarks menu, `BookmarkFile` in `mac/Sources/AsterKit`) reads and writes the same `{schema: 1, folders, bookmarks}` JSON.
+
+| API | Notes |
+| --- | --- |
+| `add({id, url, title?, folderId?, addedAt?})` | Accepts http(s) only. Returns `{added: true, id}`, or `{added: false, existingId}` if the page is already bookmarked. A missing title falls back to the host name. |
+| `find(url)`, `get(id)`, `update(id, {title?, url?, folderId?})`, `remove(id)` | `update` refuses a URL that another bookmark already uses. |
+| `addFolder({id, name})`, `renameFolder`, `removeFolder(id)`, `folderByName(name)`, `folders` | Folder names are unique, ignoring case. Removing a folder keeps its bookmarks as unfiled. |
+| `list({folderId?, text?})` | In the order bookmarks were added. `folderId: null` lists unfiled bookmarks. `text` searches titles and URLs. |
+| `toNetscapeHtml()`, `importNetscapeHtml(text, {makeId, now?})` | Reads and writes the standard `bookmarks.html` format. Nested folders are flattened to `Outer / Inner`. Import skips URLs that are already saved and links that aren't web pages, and returns `{added, duplicates, skipped, folders}`. |
+| `bookmarkKey(url)`, `parseNetscapeHtml(text)` | The duplicate rule ignores `#fragment`s and trailing slashes. `parseNetscapeHtml` is the import parser. |
+
+Backups include bookmarks under the `bookmarks` module.
+
 ## Planner: `aster/study/planner.mjs`
 
 ```js
@@ -178,7 +193,7 @@ const {keep, remove} = planRetention(existingBackups, {keepLast: 5, keepDaily: 7
 | Function | Notes |
 | --- | --- |
 | `createBackup({modules, createdAt, appVersion, label?})` | Takes a map of module name to an instance with `toJSON()` or plain data with an integer `schema`. Produces `{format: 'aster-backup', version, createdAt, appVersion, label, modules, checksum: {algorithm: 'SHA-256', value}}`. The checksum covers canonical JSON, so key order doesn't matter. The size limit is 64 MiB. |
-| `readBackup(text, {migrations?, codecs?, currentVersion?})` | Checks the checksum, then applies `migrations` (`[{from, to: from + 1, migrate(envelope)}]`) in order, then rebuilds each module with its codec. The default codecs are `library`, `planner` and `flashcards`. Unknown modules come back in `unknownModules` with a warning. A backup from a newer Aster fails with `newer_backup`, and a damaged one with `checksum_mismatch`. |
+| `readBackup(text, {migrations?, codecs?, currentVersion?})` | Checks the checksum, then applies `migrations` (`[{from, to: from + 1, migrate(envelope)}]`) in order, then rebuilds each module with its codec. The default codecs are `library`, `planner`, `flashcards` and `bookmarks`. Unknown modules come back in `unknownModules` with a warning. A backup from a newer Aster fails with `newer_backup`, and a damaged one with `checksum_mismatch`. |
 | `planRetention(backups, options)` | Grandfather-father-son rotation over `[{id, createdAt}]`. Returns the IDs to `keep` and `remove`, newest first. It refuses to remove every backup. |
 | `backupFileName(createdAt)` | `aster-backup-20261111T120000Z.json` |
 
@@ -192,6 +207,7 @@ Each screen maps to one module:
 | --- | --- |
 | Citation sidebar | `extractPageMetadata` → review form showing the `missing` fields → `ResearchLibrary.addSource` → on a duplicate, a merge dialog using `mergeMissingFields` |
 | Library view | `query`, `allTags`, folders, `annotationsFor`, `exportBibliography` |
+| Bookmarks | `BookmarkCollection`: `list`, `add`, `update`, `remove`, folders, `toNetscapeHtml`, `importNetscapeHtml` |
 | Planner / Today | `agenda`, `occurrences` for a calendar grid, `complete`, `toIcs` for "Export to calendar" |
 | Study | `due`, `review`, `stats` |
 | Data | `parseDelimited` / `parseJsonRecords` in a worker → `inferColumns` preview → `cleanTable` → `describe` / `linearRegression` → `renderChartSvg` / `tableToCsv` |

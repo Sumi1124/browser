@@ -4,6 +4,7 @@ import {AsterError} from '../aster/common/util.mjs';
 import {ResearchLibrary} from '../aster/research/library.mjs';
 import {Planner} from '../aster/study/planner.mjs';
 import {FlashcardCollection} from '../aster/study/flashcards.mjs';
+import {BookmarkCollection} from '../aster/research/bookmarks.mjs';
 import {parseDelimited, parseJsonRecords} from '../aster/data/dataset.mjs';
 import {readBackup} from '../aster/storage/backup.mjs';
 
@@ -43,7 +44,10 @@ function sampleData() {
   const cards = new FlashcardCollection();
   cards.add({id: 'c', front: 'F', back: 'B', created: '2026-11-11'});
   cards.review('c', 4, '2026-11-11');
-  return [[ResearchLibrary, library.toJSON()], [Planner, planner.toJSON()], [FlashcardCollection, cards.toJSON()]];
+  const marks = new BookmarkCollection();
+  marks.addFolder({id: 'f', name: 'F'});
+  marks.add({id: 'm', url: 'https://example.org/', title: 'E', folderId: 'f', addedAt: '2026-11-11T10:00:00Z'});
+  return [[ResearchLibrary, library.toJSON()], [Planner, planner.toJSON()], [FlashcardCollection, cards.toJSON()], [BookmarkCollection, marks.toJSON()]];
 }
 
 test('corrupted stored data fails with AsterError, never a crash', () => {

@@ -21,7 +21,9 @@ The app is ad-hoc signed, not signed with a paid Apple Developer ID, so on first
 | Workspaces | **Workspaces** menu (⌃⌘1–5): Personal, Business, IB MYP, IB Diploma Programme, and Research and Data Analysis. Each workspace has its own cookies and logins, so being signed in under Business doesn't sign you in under Personal. Its tabs group together. |
 | Private windows | ⇧⌘N opens a dark window whose cookies and history are kept in memory only and thrown away when it closes. Study tools still work, but website data is never saved. |
 | Split Search | ⌥⌘F searches two engines at once, side by side or stacked, with a swap button |
-| Study tools sidebar | ⌥⌘S opens the panel: **Planner** (recurring tasks, overdue list, export to Calendar), **Cards** (spaced-repetition flashcards, CSV import), **Library** (sources, folders, tags, notes, duplicate detection, BibTeX/RIS/CSL-JSON export), **Data** (CSV/JSON statistics, regression, charts) and **Backup** |
+| Bookmarks | ⌘D or the ☆ button bookmarks the page; the star fills in for pages you've already saved, and clicking it again removes the bookmark. The **Bookmarks** menu lists them, with folders as submenus. **Bookmarks → Show All Bookmarks** (⌥⌘B) opens the Bookmarks tab in the sidebar to search, rename, change addresses, sort into folders, and import or export the standard bookmarks file that Safari, Chrome, Firefox and Edge use. |
+| Find in page | ⌘F opens the find bar above the page and shows how many matches there are. ⌘G or Return goes to the next match, ⇧⌘G or ⇧Return to the previous one, and Esc closes the bar. |
+| Study tools sidebar | ⌥⌘S opens the panel: **Planner** (recurring tasks, overdue list, export to Calendar), **Cards** (spaced-repetition flashcards, CSV import), **Library** (sources, folders, tags, notes, duplicate detection, BibTeX/RIS/CSL-JSON export), **Bookmarks**, **Data** (CSV/JSON statistics, regression, charts) and **Backup** |
 | Cite This Page | ⌥⌘C reads the page's citation details (title, authors, date, DOI…) into the Library for you to check. Anything missing is highlighted; nothing is guessed. |
 | Downloads | Saved to ~/Downloads and marked as downloaded from the internet, so macOS checks them before they open |
 | Default browser | **Aster → Set as Default Browser…** |
@@ -42,6 +44,7 @@ mac/
 │   ├── BrowsingContext.swift    per-workspace and private website data stores
 │   ├── SplitSearchWindowController.swift
 │   ├── ToolsPanel.swift         aster:// file server, message bridge, citation runner
+│   ├── FindBar.swift            find in page
 │   ├── Downloads.swift
 │   └── SelfTest.swift           `Aster --self-test`
 ├── Tests/AsterKitTests/     XCTest unit tests
@@ -81,5 +84,5 @@ The **Mac app** GitHub workflow runs all of this on every change under `mac/` or
 
 - Aster for Mac uses WebKit, not Chromium, so Chrome extensions don't work, and pages behave as they do in Safari.
 - It is not notarized; see the first-launch steps above.
-- Not yet included: bookmarks, history search, find in page, reopening closed tabs, saved passwords beyond what websites keep in their own cookies, and the 3- and 4-pane layouts.
+- Not yet included: history search, reopening closed tabs, saved passwords beyond what websites keep in their own cookies, and the 3- and 4-pane layouts.
 - The Chromium-based design in the rest of this repository is still the long-term plan for a cross-platform build. The two share the same study-tools modules.

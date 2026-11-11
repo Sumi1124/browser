@@ -30,7 +30,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); }
 .tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 2px; padding: 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
-.tabs button { flex: 1; border: 0; border-radius: 6px; padding: 5px 2px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.tabs button { flex: 1 1 auto; border: 0; border-radius: 6px; padding: 5px 4px; background: transparent; color: var(--text); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
 main { padding: 10px; }
 h2 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
