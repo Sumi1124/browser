@@ -178,7 +178,35 @@ enum SelfTest {
             "return [document.scripts.length, document.querySelector('form').action, document.querySelector('form input').name].join('|');") as? String
         let expected = StartPage.searchForm(for: AppDelegate.shared.searchProvider)!
         try check(startInfo == "0|\(expected.action)|\(expected.field)", "start page has a script-free search form (\(startInfo ?? "-"))")
+        try check(StartPage.isStartPage(start.pane.webView.url), "start page has its own address")
+        // Back from another page must return to a working Start page, not a blank one.
+        start.pane.webView.loadHTMLString("<title>Other page</title><p>Other</p>", baseURL: URL(string: "https://example.org/other"))
+        try await waitUntil("another page") { !start.pane.webView.isLoading && start.pane.webView.title == "Other page" }
+        try check(start.pane.webView.canGoBack, "history has the start page to go back to")
+        start.pane.webView.goBack()
+        try await waitUntil("going back to the start page") { !start.pane.webView.isLoading && start.pane.webView.title == "New Tab" }
+        let backText = try await start.pane.webView.runJavaScript("return document.querySelector('form input') ? document.body.innerText : '';") as? String ?? ""
+        try check(backText.contains("Private window"), "Back returns to a working start page")
         start.window?.close()
+
+        // Split Search: both result panes get real space under the search bar.
+        let splitSearch = SplitSearchWindowController.open(context: .makePrivate())
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let panes = splitSearch.paneSizes
+        try check(min(panes.left.width, panes.right.width) > 400 && min(panes.left.height, panes.right.height) > 500,
+                  "split search panes fill the window (\(Int(panes.left.width))×\(Int(panes.left.height)) and \(Int(panes.right.width))×\(Int(panes.right.height)))")
+        splitSearch.window?.close()
+
+        // Opening and closing the sidebar applies to every tab.
+        let tabA = BrowserWindowController.open(context: .makePrivate(), url: URL(string: "about:blank"))
+        let tabB = BrowserWindowController.open(context: tabA.context, url: URL(string: "about:blank"), tabbedWith: tabA.window)
+        tabA.setToolsVisible(false)
+        try check(tabA.layoutWidths.tools == 0 && tabB.layoutWidths.tools == 0, "hiding the sidebar hides it in every tab")
+        tabB.setToolsVisible(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        try check(tabA.layoutWidths.tools >= 300 && tabB.layoutWidths.tools >= 300, "showing the sidebar shows it in every tab")
+        tabB.window?.close()
+        tabA.window?.close()
 
         // 6. Updates: install the freshly built disk image over a copy of this app,
         // and refuse a damaged download or the wrong version.
@@ -208,8 +236,14 @@ enum SelfTest {
         } else {
             print("  --  updater install test skipped (set ASTER_TEST_DMG)")
         }
-        if let release = try? await Updater.fetchLatest() {
-            print("  info  latest release on GitHub: \(release.version), disk image \(UpdatePolicy.diskImage(in: release) == nil ? "missing" : "found")")
+        // Finding the newest release must work without GitHub's API, which is
+        // often rate limited on shared networks (including CI).
+        let viaPage = try await Updater.fetchFromRedirect()
+        try check(UpdatePolicy.diskImage(in: viaPage) != nil, "update check works via the Releases page (latest is \(viaPage.version))")
+        if let viaAPI = try? await Updater.fetchFromAPI() {
+            try check(viaAPI.version == viaPage.version, "GitHub's API and the Releases page agree on the latest version")
+        } else {
+            print("  --  GitHub API unavailable here; the Releases page fallback was used")
         }
     }
 }

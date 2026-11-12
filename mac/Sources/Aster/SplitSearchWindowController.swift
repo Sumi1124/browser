@@ -18,13 +18,15 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
     private let rightEngine = NSPopUpButton()
     private let split = NSSplitView()
 
-    static func open(context: BrowsingContext, query: String = "") {
+    @discardableResult
+    static func open(context: BrowsingContext, query: String = "") -> SplitSearchWindowController {
         let controller = SplitSearchWindowController(context: context, query: query)
         all.append(controller)
         controller.window?.center()
         controller.showWindow(nil)
         controller.window?.makeFirstResponder(controller.queryField)
         if !query.isEmpty { controller.search(nil) }
+        return controller
     }
 
     private init(context: BrowsingContext, query: String) {
@@ -65,6 +67,10 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
         bar.spacing = 8
         bar.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
         queryField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // The search bar keeps its natural height; the results take the rest.
+        bar.setContentHuggingPriority(.required, for: .vertical)
+        bar.setContentCompressionResistancePriority(.required, for: .vertical)
+        split.setContentHuggingPriority(.defaultLow, for: .vertical)
 
         split.isVertical = true
         split.dividerStyle = .thin
@@ -93,6 +99,12 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    /// Sizes of the two result panes, for the self-test.
+    var paneSizes: (left: NSSize, right: NSSize) {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return (left.webView.frame.size, right.webView.frame.size)
+    }
 
     private func equalize() {
         split.layoutSubtreeIfNeeded()

@@ -29,6 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         }
         NSApp.mainMenu = makeMainMenu()
         launched = true
+        // Show the Study Tools sidebar once after installing the redesigned
+        // Aster, even if an older version last had it closed.
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: "sidebarIntroduced") {
+            defaults.set(true, forKey: "toolsVisible")
+            defaults.set(true, forKey: "sidebarIntroduced")
+        }
         // --open <url> and --show-tools are used for CI screenshots.
         var urls = pendingURLs
         if let index = arguments.firstIndex(of: "--open"), index + 1 < arguments.count, let url = URL(string: arguments[index + 1]) {
@@ -111,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @IBAction func openSplitSearch(_ sender: Any?) {
         var query = ""
         if let controller = NSApp.keyWindow?.windowController as? BrowserWindowController,
-           let url = controller.pane.webView.url, !url.absoluteString.hasPrefix("about:") {
+           let url = controller.pane.webView.url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
             query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "q" || $0.name == "p" }?.value ?? ""
         }
         SplitSearchWindowController.open(context: currentContext, query: query)
@@ -240,6 +247,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             return item
         }
 
+        // ⌘= zooms in too, without needing Shift (as in Safari).
+        let zoomInWithEquals = item("Zoom In", #selector(BrowserWindowController.asterZoomIn(_:)), "=")
+        zoomInWithEquals.isHidden = true
+        zoomInWithEquals.allowsKeyEquivalentWhenHidden = true
+
         let engines = NSMenu(title: "Search Engine")
         for provider in SearchProvider.all {
             engines.addItem(item(provider.name, #selector(selectSearchEngine(_:)), represented: provider.id))
@@ -291,6 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             .separator(),
             item("Actual Size", #selector(BrowserWindowController.asterActualSize(_:)), "0"),
             item("Zoom In", #selector(BrowserWindowController.asterZoomIn(_:)), "+"),
+            zoomInWithEquals,
             item("Zoom Out", #selector(BrowserWindowController.asterZoomOut(_:)), "-"),
             .separator(),
             item("Show Study Tools", #selector(BrowserWindowController.toggleTools(_:)), "s", [.command, .option]),

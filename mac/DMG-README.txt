@@ -32,7 +32,7 @@ It removes the "downloaded from the internet" flag from Aster only.
 Then open Aster normally.
 
 UPDATES
-Aster checks for new versions once a day and offers to install them;
+Aster checks for new versions each time it opens and offers to install them;
 click "Install and Relaunch". You can also choose Aster > Check for
 Updates..., or turn automatic checks off in the same menu. Aster must be
 in your Applications folder to update itself.
