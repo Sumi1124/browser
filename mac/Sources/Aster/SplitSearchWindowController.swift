@@ -16,7 +16,10 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
     private let queryField = NSSearchField()
     private let leftEngine = NSPopUpButton()
     private let rightEngine = NSPopUpButton()
-    private let split = NSSplitView()
+    /// NSSplitViewController gives both panes a real minimum size; a plain
+    /// NSSplitView left the right pane 0 points wide until the first search.
+    private let splitController = NSSplitViewController()
+    private var split: NSSplitView { splitController.splitView }
 
     @discardableResult
     static func open(context: BrowsingContext, query: String = "") -> SplitSearchWindowController {
@@ -25,6 +28,7 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
         controller.window?.center()
         controller.showWindow(nil)
         controller.window?.makeFirstResponder(controller.queryField)
+        controller.equalize()
         if !query.isEmpty { controller.search(nil) }
         return controller
     }
@@ -70,23 +74,29 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
         // The search bar keeps its natural height; the results take the rest.
         bar.setContentHuggingPriority(.required, for: .vertical)
         bar.setContentCompressionResistancePriority(.required, for: .vertical)
-        split.setContentHuggingPriority(.defaultLow, for: .vertical)
 
         split.isVertical = true
         split.dividerStyle = .thin
-        split.addArrangedSubview(left.webView)
-        split.addArrangedSubview(right.webView)
+        for pane in [left, right] {
+            let controller = NSViewController()
+            controller.view = pane.webView
+            let item = NSSplitViewItem(viewController: controller)
+            item.minimumThickness = 200
+            splitController.addSplitViewItem(item)
+        }
+        let splitArea = splitController.view
+        splitArea.setContentHuggingPriority(.defaultLow, for: .vertical)
 
-        let column = NSStackView(views: [bar, split])
+        let column = NSStackView(views: [bar, splitArea])
         column.orientation = .vertical
         column.spacing = 0
         column.alignment = .leading
         bar.translatesAutoresizingMaskIntoConstraints = false
-        split.translatesAutoresizingMaskIntoConstraints = false
+        splitArea.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = column
         NSLayoutConstraint.activate([
             bar.widthAnchor.constraint(equalTo: column.widthAnchor),
-            split.widthAnchor.constraint(equalTo: column.widthAnchor),
+            splitArea.widthAnchor.constraint(equalTo: column.widthAnchor),
         ])
 
         for pane in [left, right] {
@@ -107,7 +117,7 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func equalize() {
-        split.layoutSubtreeIfNeeded()
+        window?.contentView?.layoutSubtreeIfNeeded()
         let length = split.isVertical ? split.bounds.width : split.bounds.height
         split.setPosition(length / 2, ofDividerAt: 0)
     }
