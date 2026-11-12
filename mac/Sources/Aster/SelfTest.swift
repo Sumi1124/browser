@@ -158,7 +158,20 @@ enum SelfTest {
         try check(browser.pane.webView.configuration.preferences.isElementFullscreenEnabled, "video full screen is enabled")
         browser.window?.close()
 
-        // 5. New tabs open on the Start page: no scripts, searches the chosen engine.
+        // 5. New tabs open on the Start page: no scripts, searches the chosen engine,
+        // shows today's summary from the study tools, and the tab bar is visible.
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        try ToolsHub.shared.store.save("glance", text: #"{"schema":1,"date":"\#(formatter.string(from: Date()))","tasksToday":2,"overdue":1,"next":"History IA draft","cardsDue":5,"decks":["Biology HL"]}"#)
+        let summary = BrowserWindowController.open(context: .workspace(Workspace.defaults[0]))
+        try await waitUntil("the start page with a summary") { !summary.pane.webView.isLoading && summary.pane.webView.title == "New Tab" }
+        let summaryText = try await summary.pane.webView.runJavaScript("return document.body.innerText;") as? String ?? ""
+        try check(summaryText.contains("2 tasks today") && summaryText.contains("5 flashcards due"), "start page shows today's tasks and due flashcards")
+        try check(summary.window?.tabGroup?.isTabBarVisible == true, "tab bar is visible with a single tab")
+        summary.window?.close()
+
         let start = BrowserWindowController.open(context: .makePrivate())
         try await waitUntil("the start page") { !start.pane.webView.isLoading && start.pane.webView.title == "New Tab" }
         let startInfo = try await start.pane.webView.runJavaScript(

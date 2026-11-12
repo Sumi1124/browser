@@ -211,3 +211,19 @@ final class UpdateTests: XCTestCase {
         XCTAssertFalse(UpdatePolicy.canReplaceApp(at: URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/ABC/d/Aster.app")))
     }
 }
+
+final class GlanceTests: XCTestCase {
+    func testParsesTodaysSummaryOnly() {
+        let text = #"{"schema":1,"date":"2026-11-11","tasksToday":3,"overdue":1,"next":"<b>IA</b> draft","cardsDue":12,"decks":["Biology HL","Chemistry SL"]}"#
+        let glance = StartPage.Glance.parse(text, today: "2026-11-11")
+        XCTAssertEqual(glance?.tasksToday, 3)
+        XCTAssertNil(StartPage.Glance.parse(text, today: "2026-11-12"), "yesterday's summary is not shown")
+        XCTAssertNil(StartPage.Glance.parse("{bad", today: "2026-11-11"))
+        let html = StartPage.html(workspace: "Personal", isPrivate: false, provider: .fallback, bookmarks: [], glance: glance)
+        XCTAssertTrue(html.contains("3 tasks today"))
+        XCTAssertTrue(html.contains("12 flashcards due"))
+        XCTAssertTrue(html.contains("1 overdue · &lt;b&gt;IA&lt;/b&gt; draft"))
+        XCTAssertFalse(StartPage.html(workspace: "P", isPrivate: true, provider: .fallback, bookmarks: [], glance: glance).contains("tasks today"),
+                       "private windows don't show study data")
+    }
+}

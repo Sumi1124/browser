@@ -42,6 +42,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     private(set) lazy var findBar = FindBar(webView: pane.webView)
     private var dataObserver: NSObjectProtocol?
     private var starredKey: String?
+    private var startPageHTML: String?
 
     var hostWindow: NSWindow? { window }
 
@@ -59,6 +60,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         } else {
             controller.window?.center()
             controller.showWindow(nil)
+            // Show the tab bar even with a single tab, as in Aster's design.
+            if let window = controller.window, window.tabGroup?.isTabBarVisible == false { window.toggleTabBar(nil) }
         }
         if let url {
             controller.pane.load(url)
@@ -96,8 +99,12 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         }
         pane.onCloseRequest = { [weak self] in self?.window?.performClose(nil) }
         dataObserver = NotificationCenter.default.addObserver(forName: .asterToolsDataDidChange, object: nil, queue: .main) { [weak self] note in
-            guard note.userInfo?["key"] as? String == BookmarkFile.storageKey else { return }
-            MainActor.assumeIsolated { self?.refreshBookmarkStar(force: true) }
+            let key = note.userInfo?["key"] as? String
+            MainActor.assumeIsolated {
+                if key == BookmarkFile.storageKey { self?.refreshBookmarkStar(force: true) }
+                // Keep an open Start page's bookmarks and Today summary current.
+                if key == BookmarkFile.storageKey || key == "glance" { self?.refreshStartPageIfShown() }
+            }
         }
         tools.load()
         refresh()
@@ -133,7 +140,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         toolsItem.minimumThickness = 300
         toolsItem.maximumThickness = 560
         toolsItem.holdingPriority = NSLayoutConstraint.Priority(260)
-        toolsItem.isCollapsed = !UserDefaults.standard.bool(forKey: "toolsVisible")
+        // The sidebar is part of Aster's design, so it starts open until the user hides it.
+        toolsItem.isCollapsed = !(UserDefaults.standard.object(forKey: "toolsVisible") as? Bool ?? true)
 
         splitController.splitView.isVertical = true
         splitController.splitView.dividerStyle = .thin
@@ -220,7 +228,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
             let item = button("star", "Bookmark This Page", #selector(toggleBookmark(_:)))
             DispatchQueue.main.async { [weak self] in self?.refreshBookmarkStar(force: true) }
             return item
-        case .tools: return button("sidebar.right", "Study Tools", #selector(toggleTools(_:)))
+        case .tools:
+            let item = button("sidebar.right", "Study Tools", #selector(toggleTools(_:)))
+            DispatchQueue.main.async { [weak self] in self?.refreshToolsButton() }
+            return item
         case .address:
             let item = NSToolbarItem(itemIdentifier: identifier)
             addressField.placeholderString = context.isPrivate ? "Private: search or enter website" : "Search or enter website"
@@ -264,9 +275,29 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
 
     /// Shows the Start page (search box and bookmark tiles) in this tab.
     func showStartPage() {
-        let bookmarks = (try? BookmarkFile(store: ToolsHub.shared.store).read().bookmarks) ?? []
-        let html = StartPage.html(workspace: context.name, isPrivate: context.isPrivate,
-                                  provider: AppDelegate.shared.searchProvider, bookmarks: bookmarks.reversed())
+        let html = startPageMarkup()
+        startPageHTML = html
+        pane.webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    private func startPageMarkup() -> String {
+        let store = ToolsHub.shared.store
+        let bookmarks = (try? BookmarkFile(store: store).read().bookmarks) ?? []
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let glance = StartPage.Glance.parse(try? store.load("glance"), today: formatter.string(from: Date()))
+        return StartPage.html(workspace: context.name, isPrivate: context.isPrivate,
+                              provider: AppDelegate.shared.searchProvider, bookmarks: bookmarks.reversed(), glance: glance)
+    }
+
+    /// Re-renders the Start page in place when it is showing and its content changed.
+    private func refreshStartPageIfShown() {
+        guard startPageHTML != nil, pane.webView.url?.absoluteString == "about:blank", !pane.webView.isLoading else { return }
+        let html = startPageMarkup()
+        guard html != startPageHTML else { return }
+        startPageHTML = html
         pane.webView.loadHTMLString(html, baseURL: nil)
     }
 
@@ -411,6 +442,19 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
         toolsItem.isCollapsed = !visible
         UserDefaults.standard.set(visible, forKey: "toolsVisible")
         if visible { positionTools() }
+        refreshToolsButton()
+    }
+
+    /// The sidebar button is violet while the sidebar is open.
+    private func refreshToolsButton() {
+        guard let item = toolbarButtons[.tools] else { return }
+        let open = !toolsItem.isCollapsed
+        let symbol = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            .applying(.init(paletteColors: [open ? .asterAccent : .labelColor]))
+        item.image = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: open ? "Hide Study Tools" : "Show Study Tools")?
+            .withSymbolConfiguration(symbol)
+        item.label = open ? "Hide Study Tools" : "Study Tools"
+        item.toolTip = open ? "Hide Study Tools (⌥⌘S)" : "Show Study Tools (⌥⌘S)"
     }
 
     @IBAction func citeThisPage(_ sender: Any?) {
