@@ -51,6 +51,54 @@ final class BrowsingContext {
     }
 }
 
+/// Serves the Start page at aster-start://home/. Because it has a real
+/// address, Back returns to it and Reload refreshes it (a page loaded from a
+/// string comes back blank). It is only served as the top-level page, never
+/// inside a frame on a website.
+@MainActor
+final class StartPageSchemeHandler: NSObject, WKURLSchemeHandler {
+    let workspaceName: String
+    let isPrivate: Bool
+
+    init(workspaceName: String, isPrivate: Bool) {
+        self.workspaceName = workspaceName
+        self.isPrivate = isPrivate
+    }
+
+    static func html(workspaceName: String, isPrivate: Bool) -> String {
+        let store = ToolsHub.shared.store
+        let bookmarks = (try? BookmarkFile(store: store).read().bookmarks) ?? []
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let glance = StartPage.Glance.parse(try? store.load("glance"), today: formatter.string(from: Date()))
+        return StartPage.html(workspace: workspaceName, isPrivate: isPrivate, provider: AppDelegate.shared.searchProvider,
+                              bookmarks: bookmarks.reversed(), glance: glance,
+                              version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+    }
+
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        guard let url = task.request.url, StartPage.isStartPage(url),
+              task.request.mainDocumentURL == nil || task.request.mainDocumentURL == url else {
+            task.didFailWithError(URLError(.unsupportedURL))
+            return
+        }
+        let data = Data(Self.html(workspaceName: workspaceName, isPrivate: isPrivate).utf8)
+        let headers = ["Content-Type": "text/html; charset=utf-8", "Content-Length": String(data.count), "Cache-Control": "no-store",
+                       "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "frame-ancestors 'none'"]
+        guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers) else {
+            task.didFailWithError(URLError(.cannotParseResponse))
+            return
+        }
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
+}
+
 enum WebViewFactory {
     /// Configuration for ordinary browsing tabs. Browsing tabs never get the
     /// study-tools bridge; only the bundled tools page does.
@@ -58,6 +106,8 @@ enum WebViewFactory {
     static func browsingConfiguration(for context: BrowsingContext) -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = context.dataStore
+        configuration.setURLSchemeHandler(StartPageSchemeHandler(workspaceName: context.name, isPrivate: context.isPrivate),
+                                          forURLScheme: StartPage.scheme)
         configuration.preferences.isFraudulentWebsiteWarningEnabled = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop

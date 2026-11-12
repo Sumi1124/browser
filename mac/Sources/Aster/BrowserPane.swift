@@ -1,5 +1,6 @@
 // Copyright 2026 Aster contributors. BSD-3-Clause; see LICENSE.
 import AppKit
+import AsterKit
 import WebKit
 
 /// One web page view plus the browser behaviour around it: navigation
@@ -60,6 +61,11 @@ final class BrowserPane: NSObject, WKNavigationDelegate, WKUIDelegate {
             decisionHandler(.download)
             return
         }
+        if StartPage.isStartPage(url) {
+            // Aster's own Start page: only ever as the whole page.
+            decisionHandler(action.targetFrame?.isMainFrame == true ? .allow : .cancel)
+            return
+        }
         let webSchemes: Set<String> = ["http", "https", "about", "blob", "data"]
         if !webSchemes.contains(scheme) {
             // mailto:, tel:, zoommtg: … are handed to the Mac only when the
@@ -110,7 +116,13 @@ final class BrowserPane: NSObject, WKNavigationDelegate, WKUIDelegate {
         showError(error)
     }
 
+    private var lastCrashReload = Date.distantPast
+
+    /// Reloads a page whose web process crashed, but not in a loop: a page
+    /// that crashes again within ten seconds is left for the user to reload.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard Date().timeIntervalSince(lastCrashReload) > 10 else { return }
+        lastCrashReload = Date()
         webView.reload()
     }
 
@@ -132,7 +144,10 @@ final class BrowserPane: NSObject, WKNavigationDelegate, WKUIDelegate {
         <p>\(escape(nsError.localizedDescription))</p>
         <p>\(escape(failing?.absoluteString ?? ""))</p>
         """
-        webView.loadHTMLString(html, baseURL: nil)
+        // Keeping the failed address as the page's address leaves it in the
+        // address bar and makes Reload try it again.
+        let scheme = failing?.scheme?.lowercased()
+        webView.loadHTMLString(html, baseURL: scheme == "http" || scheme == "https" ? failing : nil)
     }
 
     // MARK: Windows, dialogs and uploads

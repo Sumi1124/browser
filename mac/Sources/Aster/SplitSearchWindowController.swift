@@ -16,15 +16,21 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
     private let queryField = NSSearchField()
     private let leftEngine = NSPopUpButton()
     private let rightEngine = NSPopUpButton()
-    private let split = NSSplitView()
+    /// NSSplitViewController gives both panes a real minimum size; a plain
+    /// NSSplitView left the right pane 0 points wide until the first search.
+    private let splitController = NSSplitViewController()
+    private var split: NSSplitView { splitController.splitView }
 
-    static func open(context: BrowsingContext, query: String = "") {
+    @discardableResult
+    static func open(context: BrowsingContext, query: String = "") -> SplitSearchWindowController {
         let controller = SplitSearchWindowController(context: context, query: query)
         all.append(controller)
         controller.window?.center()
         controller.showWindow(nil)
         controller.window?.makeFirstResponder(controller.queryField)
+        controller.equalize()
         if !query.isEmpty { controller.search(nil) }
+        return controller
     }
 
     private init(context: BrowsingContext, query: String) {
@@ -65,22 +71,32 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
         bar.spacing = 8
         bar.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
         queryField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // The search bar keeps its natural height; the results take the rest.
+        bar.setContentHuggingPriority(.required, for: .vertical)
+        bar.setContentCompressionResistancePriority(.required, for: .vertical)
 
         split.isVertical = true
         split.dividerStyle = .thin
-        split.addArrangedSubview(left.webView)
-        split.addArrangedSubview(right.webView)
+        for pane in [left, right] {
+            let controller = NSViewController()
+            controller.view = pane.webView
+            let item = NSSplitViewItem(viewController: controller)
+            item.minimumThickness = 200
+            splitController.addSplitViewItem(item)
+        }
+        let splitArea = splitController.view
+        splitArea.setContentHuggingPriority(.defaultLow, for: .vertical)
 
-        let column = NSStackView(views: [bar, split])
+        let column = NSStackView(views: [bar, splitArea])
         column.orientation = .vertical
         column.spacing = 0
         column.alignment = .leading
         bar.translatesAutoresizingMaskIntoConstraints = false
-        split.translatesAutoresizingMaskIntoConstraints = false
+        splitArea.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = column
         NSLayoutConstraint.activate([
             bar.widthAnchor.constraint(equalTo: column.widthAnchor),
-            split.widthAnchor.constraint(equalTo: column.widthAnchor),
+            splitArea.widthAnchor.constraint(equalTo: column.widthAnchor),
         ])
 
         for pane in [left, right] {
@@ -94,8 +110,14 @@ final class SplitSearchWindowController: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) { nil }
 
+    /// Sizes of the two result panes, for the self-test.
+    var paneSizes: (left: NSSize, right: NSSize) {
+        window?.contentView?.layoutSubtreeIfNeeded()
+        return (left.webView.frame.size, right.webView.frame.size)
+    }
+
     private func equalize() {
-        split.layoutSubtreeIfNeeded()
+        window?.contentView?.layoutSubtreeIfNeeded()
         let length = split.isVertical ? split.bounds.width : split.bounds.height
         split.setPosition(length / 2, ofDividerAt: 0)
     }

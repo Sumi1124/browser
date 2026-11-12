@@ -44,6 +44,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     private var starredKey: String?
     private var startPageHTML: String?
 
+    /// Text for the address bar: empty on the Start page.
+    private var displayAddress: String {
+        StartPage.isStartPage(pane.webView.url) ? "" : AddressInput.display(pane.webView.url)
+    }
+
     var hostWindow: NSWindow? { window }
 
     // MARK: Creating tabs and windows
@@ -257,10 +262,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
 
     private func refresh() {
         let webView = pane.webView
-        let title = webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? AddressInput.display(webView.url)
+        let title = webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? displayAddress
         window?.title = title.isEmpty ? "New Tab" : title
         window?.tab.title = window?.title ?? ""
-        if !editingAddress { addressField.stringValue = AddressInput.display(webView.url) }
+        if !editingAddress { addressField.stringValue = displayAddress }
         toolbarButtons[.back]?.isEnabled = webView.canGoBack
         toolbarButtons[.forward]?.isEnabled = webView.canGoForward
         let reload = toolbarButtons[.reload]
@@ -275,30 +280,21 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
 
     /// Shows the Start page (search box and bookmark tiles) in this tab.
     func showStartPage() {
-        let html = startPageMarkup()
-        startPageHTML = html
-        pane.webView.loadHTMLString(html, baseURL: nil)
+        startPageHTML = startPageMarkup()
+        pane.load(StartPage.url)
     }
 
     private func startPageMarkup() -> String {
-        let store = ToolsHub.shared.store
-        let bookmarks = (try? BookmarkFile(store: store).read().bookmarks) ?? []
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        let glance = StartPage.Glance.parse(try? store.load("glance"), today: formatter.string(from: Date()))
-        return StartPage.html(workspace: context.name, isPrivate: context.isPrivate,
-                              provider: AppDelegate.shared.searchProvider, bookmarks: bookmarks.reversed(), glance: glance)
+        StartPageSchemeHandler.html(workspaceName: context.name, isPrivate: context.isPrivate)
     }
 
-    /// Re-renders the Start page in place when it is showing and its content changed.
+    /// Reloads the Start page when it is showing and its content changed.
     private func refreshStartPageIfShown() {
-        guard startPageHTML != nil, pane.webView.url?.absoluteString == "about:blank", !pane.webView.isLoading else { return }
+        guard StartPage.isStartPage(pane.webView.url), !pane.webView.isLoading else { return }
         let html = startPageMarkup()
         guard html != startPageHTML else { return }
         startPageHTML = html
-        pane.webView.loadHTMLString(html, baseURL: nil)
+        pane.webView.reload()
     }
 
     @objc private func showWorkspaceMenu(_ sender: NSButton) {
@@ -397,7 +393,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         if selector == #selector(NSResponder.cancelOperation(_:)) {
             editingAddress = false
-            addressField.stringValue = AddressInput.display(pane.webView.url)
+            addressField.stringValue = displayAddress
             window?.makeFirstResponder(pane.webView)
             return true
         }
@@ -438,9 +434,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, NSToo
 
     @IBAction func toggleTools(_ sender: Any?) { setToolsVisible(toolsItem.isCollapsed) }
 
+    /// Shows or hides the sidebar in every tab and window, so switching tabs
+    /// never brings back a sidebar you just closed.
     func setToolsVisible(_ visible: Bool) {
-        toolsItem.isCollapsed = !visible
         UserDefaults.standard.set(visible, forKey: "toolsVisible")
+        for controller in Self.all { controller.applyToolsVisible(visible) }
+        if !Self.all.contains(where: { $0 === self }) { applyToolsVisible(visible) }
+    }
+
+    private func applyToolsVisible(_ visible: Bool) {
+        guard toolsItem.isCollapsed == visible else { return }
+        toolsItem.isCollapsed = !visible
         if visible { positionTools() }
         refreshToolsButton()
     }

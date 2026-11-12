@@ -197,7 +197,8 @@ final class UpdateTests: XCTestCase {
         XCTAssertNotNil(UpdatePolicy.diskImage(in: make("https://github.com/a/b/releases/download/v1.0.0/Aster-1.0.0.dmg", 10)))
         XCTAssertNil(UpdatePolicy.diskImage(in: make("http://github.com/x.dmg", 10)), "plain HTTP")
         XCTAssertNil(UpdatePolicy.diskImage(in: make("https://evil.example/Aster-1.0.0.dmg", 10)), "other host")
-        XCTAssertNil(UpdatePolicy.diskImage(in: make("https://github.com/x.dmg", 0)), "empty")
+        XCTAssertNotNil(UpdatePolicy.diskImage(in: make("https://github.com/x.dmg", 0)), "size not known in advance")
+        XCTAssertNil(UpdatePolicy.diskImage(in: make("https://github.com/x.dmg", -1)), "negative size")
         XCTAssertNil(UpdatePolicy.diskImage(in: make("https://github.com/x.dmg", 400 * 1024 * 1024)), "too large")
     }
 
@@ -225,5 +226,30 @@ final class GlanceTests: XCTestCase {
         XCTAssertTrue(html.contains("1 overdue · &lt;b&gt;IA&lt;/b&gt; draft"))
         XCTAssertFalse(StartPage.html(workspace: "P", isPrivate: true, provider: .fallback, bookmarks: [], glance: glance).contains("tasks today"),
                        "private windows don't show study data")
+    }
+}
+
+final class UpdateFallbackTests: XCTestCase {
+    func testReleaseFromLatestRedirect() throws {
+        let url = URL(string: "https://github.com/Sumi1124/browser/releases/tag/v0.8.0")
+        let release = try XCTUnwrap(ReleaseInfo.fromLatestRedirect(url, repository: "Sumi1124/browser"))
+        XCTAssertEqual(release.version.description, "0.8.0")
+        let dmg = try XCTUnwrap(UpdatePolicy.diskImage(in: release))
+        XCTAssertEqual(dmg.url.absoluteString, "https://github.com/Sumi1124/browser/releases/download/v0.8.0/Aster-0.8.0.dmg")
+        XCTAssertNil(dmg.sha256)
+        XCTAssertNotNil(release.assets.first { $0.name == "SHA256SUMS.txt" })
+        for bad in ["https://github.com/Sumi1124/browser/releases", "https://github.com/other/repo/releases/tag/v0.8.0",
+                    "https://evil.example/Sumi1124/browser/releases/tag/v0.8.0", "https://github.com/Sumi1124/browser/releases/tag/latest",
+                    "http://github.com/Sumi1124/browser/releases/tag/v0.8.0"] {
+            XCTAssertNil(ReleaseInfo.fromLatestRedirect(URL(string: bad), repository: "Sumi1124/browser"), bad)
+        }
+    }
+
+    func testStartPageAddressAndVersion() {
+        XCTAssertTrue(StartPage.isStartPage(StartPage.url))
+        XCTAssertFalse(StartPage.isStartPage(URL(string: "https://example.org")))
+        XCTAssertFalse(StartPage.isStartPage(nil))
+        let html = StartPage.html(workspace: "Personal", isPrivate: false, provider: .fallback, bookmarks: [], version: "0.8.0")
+        XCTAssertTrue(html.contains("<footer>Aster 0.8.0</footer>"))
     }
 }

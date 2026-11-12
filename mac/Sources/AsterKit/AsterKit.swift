@@ -437,7 +437,16 @@ public enum StartPage {
         return #"<section class="glances" aria-label="Today">\#(items.joined())</section>"#
     }
 
-    public static func html(workspace: String, isPrivate: Bool, provider: SearchProvider, bookmarks: [BookmarkFile.Bookmark], glance: Glance? = nil) -> String {
+    /// The address new tabs load. Served by the app, so Back and Reload work.
+    public static let scheme = "aster-start"
+    public static let url = URL(string: "aster-start://home/")!
+
+    public static func isStartPage(_ url: URL?) -> Bool {
+        url?.scheme?.lowercased() == scheme
+    }
+
+    public static func html(workspace: String, isPrivate: Bool, provider: SearchProvider, bookmarks: [BookmarkFile.Bookmark],
+                            glance: Glance? = nil, version: String? = nil) -> String {
         let form = searchForm(for: provider) ?? searchForm(for: .fallback)!
         let tiles = bookmarks.prefix(12).map { bookmark -> String in
             let mark = monogram(for: bookmark)
@@ -475,6 +484,7 @@ public enum StartPage {
         .mono{width:52px;height:52px;border-radius:12px;display:grid;place-items:center;font-size:20px;font-weight:700}
         .name{font-size:12px;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .hint{color:var(--muted);text-align:center;font-size:13px}
+        footer{margin-top:auto;padding-top:24px;color:var(--muted);font-size:11px}
         .glances{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
         .glance{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:var(--surface);box-shadow:0 0 0 1px var(--line)}
         .glance strong{display:block;font-size:13px}.glance span{display:block;font-size:12px;color:var(--muted)}
@@ -492,6 +502,7 @@ public enum StartPage {
         </form>
         <section>\(bookmarkSection)</section>
         \(isPrivate ? "" : glanceSection(glance))
+        \(version.map { "<footer>Aster \(escape($0))</footer>" } ?? "")
         </body></html>
         """
     }
@@ -528,6 +539,7 @@ public struct ReleaseInfo: Equatable, Sendable {
     public struct Asset: Equatable, Sendable {
         public let name: String
         public let url: URL
+        /// Bytes, or 0 when not known in advance.
         public let size: Int
         /// GitHub's own SHA-256 of the file, from the asset's "digest" field.
         public let sha256: String?
@@ -540,6 +552,24 @@ public struct ReleaseInfo: Equatable, Sendable {
 
     public static func == (lhs: ReleaseInfo, rhs: ReleaseInfo) -> Bool {
         lhs.version == rhs.version && lhs.notes == rhs.notes && lhs.page == rhs.page && lhs.assets == rhs.assets
+    }
+
+    /// Builds a release from the address `…/releases/latest` redirects to
+    /// (`…/releases/tag/v1.2.3`). Used when GitHub's API is unavailable, for
+    /// example when a shared network has used up its hourly API allowance.
+    /// Asset addresses follow the release workflow's fixed naming; the
+    /// checksum then comes from the release's SHA256SUMS.txt.
+    public static func fromLatestRedirect(_ url: URL?, repository: String) -> ReleaseInfo? {
+        guard let url, url.scheme == "https", url.host?.lowercased() == "github.com" else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count == 5, "\(parts[0])/\(parts[1])" == repository, parts[2] == "releases", parts[3] == "tag",
+              let version = SemanticVersion(parts[4]) else { return nil }
+        let base = "https://github.com/\(repository)/releases/download/v\(version)"
+        guard let dmg = URL(string: "\(base)/Aster-\(version).dmg"), let sums = URL(string: "\(base)/SHA256SUMS.txt") else { return nil }
+        return ReleaseInfo(version: version, notes: "", page: url, assets: [
+            Asset(name: "Aster-\(version).dmg", url: dmg, size: 0, sha256: nil),
+            Asset(name: "SHA256SUMS.txt", url: sums, size: 0, sha256: nil),
+        ])
     }
 
     /// Parses GitHub's `GET /repos/{owner}/{repo}/releases/latest` response.
@@ -572,7 +602,7 @@ public enum UpdatePolicy {
     public static func diskImage(in release: ReleaseInfo) -> ReleaseInfo.Asset? {
         release.assets.first { asset in
             asset.name == "Aster-\(release.version).dmg" && asset.url.scheme == "https"
-                && downloadHosts.contains(asset.url.host?.lowercased() ?? "") && asset.size > 0 && asset.size <= maxDownloadBytes
+                && downloadHosts.contains(asset.url.host?.lowercased() ?? "") && asset.size >= 0 && asset.size <= maxDownloadBytes
         }
     }
 
