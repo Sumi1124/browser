@@ -164,11 +164,18 @@ enum SelfTest {
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
-        try ToolsHub.shared.store.save("glance", text: #"{"schema":1,"date":"\#(formatter.string(from: Date()))","tasksToday":2,"overdue":1,"next":"History IA draft","cardsDue":5,"decks":["Biology HL"]}"#)
+        // Real planner and flashcard data: the sidebar works out the summary
+        // itself and the Start page picks it up.
+        let today = formatter.string(from: Date())
+        try ToolsHub.shared.store.save("planner", text: #"{"schema":1,"tasks":[{"id":"t1","title":"History IA draft","due":"\#(today)"},{"id":"t2","title":"Vocabulary","due":"\#(today)","recurrence":{"freq":"daily","interval":1}}]}"#)
+        try ToolsHub.shared.store.save("flashcards", text: #"{"schema":1,"cards":[{"id":"c1","front":"Q","back":"A","deck":"Biology HL","tags":[],"ease":2.5,"interval":0,"repetitions":0,"lapses":0,"due":"\#(today)","history":[]}]}"#)
         let summary = BrowserWindowController.open(context: .workspace(Workspace.defaults[0]))
-        try await waitUntil("the start page with a summary") { !summary.pane.webView.isLoading && summary.pane.webView.title == "New Tab" }
-        let summaryText = try await summary.pane.webView.runJavaScript("return document.body.innerText;") as? String ?? ""
-        try check(summaryText.contains("2 tasks today") && summaryText.contains("5 flashcards due"), "start page shows today's tasks and due flashcards")
+        try await waitUntil("the start page's Today summary") {
+            guard !summary.pane.webView.isLoading, summary.pane.webView.title == "New Tab" else { return false }
+            let text = try await summary.pane.webView.runJavaScript("return document.body.innerText;") as? String ?? ""
+            return text.contains("2 tasks today") && text.contains("1 flashcard due")
+        }
+        try check(true, "start page shows today's tasks and due flashcards, computed by the sidebar")
         try check(summary.window?.tabGroup?.isTabBarVisible == true, "tab bar is visible with a single tab")
         summary.window?.close()
 
