@@ -187,11 +187,13 @@ enum SelfTest {
         try check(startInfo == "0|\(expected.action)|\(expected.field)", "start page has a script-free search form (\(startInfo ?? "-"))")
         try check(StartPage.isStartPage(start.pane.webView.url), "start page has its own address")
         // Back from another page must return to a working Start page, not a blank one.
-        start.pane.webView.loadHTMLString("<title>Other page</title><p>Other</p>", baseURL: URL(string: "https://example.org/other"))
-        try await waitUntil("another page") { !start.pane.webView.isLoading && start.pane.webView.title == "Other page" }
-        try check(start.pane.webView.canGoBack, "history has the start page to go back to")
+        // (A second address served by the app stands in for a website, so no network is needed.)
+        let second = URL(string: "aster-start://home/second")!
+        start.pane.load(second)
+        try await waitUntil("a second page") { !start.pane.webView.isLoading && start.pane.webView.url == second }
+        try check(start.pane.webView.canGoBack, "the start page is in the Back history")
         start.pane.webView.goBack()
-        try await waitUntil("going back to the start page") { !start.pane.webView.isLoading && start.pane.webView.title == "New Tab" }
+        try await waitUntil("going back to the start page") { !start.pane.webView.isLoading && start.pane.webView.url == StartPage.url }
         let backText = try await start.pane.webView.runJavaScript("return document.querySelector('form input') ? document.body.innerText : '';") as? String ?? ""
         try check(backText.contains("Private window"), "Back returns to a working start page")
         start.window?.close()
