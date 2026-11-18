@@ -24,6 +24,7 @@ If macOS says Aster "is damaged", or there's no **Open Anyway** button, run `xat
 | Private windows | ⇧⌘N opens a dark window whose cookies and history are kept in memory only and thrown away when it closes. Study tools still work, but website data is never saved. |
 | Split Search | ⌥⌘F searches two engines at once, side by side or stacked, with a swap button |
 | Bookmarks | ⌘D or the ☆ button bookmarks the page; the star fills in for pages you've already saved, and clicking it again removes the bookmark. The **Bookmarks** menu lists them, with folders as submenus. **Bookmarks → Show All Bookmarks** (⌥⌘B) opens the Bookmarks tab in the sidebar to search, rename, change addresses, sort into folders, and import or export the standard bookmarks file that Safari, Chrome, Firefox and Edge use. |
+| Ad and tracker blocking | **Aster → Block Ads and Trackers** is on by default. WebKit blocks third-party requests to more than 140 known advertising, analytics and tracking hosts before they are sent, so pages load faster, and hides the empty ad boxes left behind. Sites' own content is never blocked. **Aster → Pause Blocking on This Site** turns it off for one site if something doesn't work. |
 | Find in page | ⌘F opens the find bar above the page and shows how many matches there are. ⌘G or Return goes to the next match, ⇧⌘G or ⇧Return to the previous one, and Esc closes the bar. |
 | Study tools sidebar | ⌥⌘S opens the panel: **Planner** (recurring tasks, overdue list, export to Calendar), **Cards** (spaced-repetition flashcards, CSV import), **Library** (sources, folders, tags, notes, duplicate detection, BibTeX/RIS/CSL-JSON export), **Bookmarks**, **Data** (CSV/JSON statistics, regression, charts) and **Backup** |
 | Cite This Page | ⌥⌘C reads the page's citation details (title, authors, date, DOI…) into the Library for you to check. Anything missing is highlighted; nothing is guessed. |
@@ -39,7 +40,7 @@ Study-tools data is stored in `~/Library/Application Support/Aster/Study Tools/`
 ```
 mac/
 ├── Package.swift            Swift package (macOS 14+)
-├── Sources/AsterKit/        UI-free logic: address bar, search engines, workspaces, storage, file names
+├── Sources/AsterKit/        UI-free logic: address bar, search engines, workspaces, storage, file names, blocking rules
 ├── Sources/Aster/           The app (AppKit + WebKit)
 │   ├── AppDelegate.swift        menus, workspaces, default browser, opening links from other apps
 │   ├── BrowserWindowController  a tab: toolbar, address bar, sidebar, Cite This Page
@@ -47,6 +48,7 @@ mac/
 │   ├── BrowsingContext.swift    per-workspace and private website data stores
 │   ├── SplitSearchWindowController.swift
 │   ├── ToolsPanel.swift         aster:// file server, message bridge, citation runner
+│   ├── ContentBlockerManager.swift  compiles and applies the blocking rules
 │   ├── FindBar.swift            find in page
 │   ├── Downloads.swift
 │   └── SelfTest.swift           `Aster --self-test`

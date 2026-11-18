@@ -5,8 +5,27 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from apply_overlay import ROOT, PATCH, source_checks
+
+def download(url, attempts=6):
+    """Fetch a URL, waiting and retrying when GitHub rate-limits (429) or has a brief outage."""
+    for attempt in range(attempts):
+        try:
+            return urllib.request.urlopen(url, timeout=30).read()
+        except urllib.error.HTTPError as error:
+            if error.code not in (429, 500, 502, 503, 504) or attempt == attempts - 1:
+                raise
+            retry_after = error.headers.get('Retry-After', '')
+            delay = int(retry_after) if retry_after.isdigit() else 2 ** attempt * 5
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == attempts - 1:
+                raise
+            delay = 2 ** attempt * 5
+        time.sleep(min(delay, 90))
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -19,8 +38,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='patch-check-', dir=work) as temporary:
         root = Path(temporary)
         for path in paths:
-            data = (args.snapshot / path).read_bytes() if args.snapshot else urllib.request.urlopen(
-                f'https://raw.githubusercontent.com/chromium/chromium/{pin["revision"]}/{path}', timeout=30).read()
+            data = (args.snapshot / path).read_bytes() if args.snapshot else download(
+                f'https://raw.githubusercontent.com/chromium/chromium/{pin["revision"]}/{path}')
             target = root / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
