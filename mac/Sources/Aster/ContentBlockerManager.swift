@@ -85,11 +85,17 @@ final class ContentBlockerManager {
         if let cached = try? await store.contentRuleList(forIdentifier: name) { return cached }
         let list = try? await store.compileContentRuleList(forIdentifier: name, encodedContentRuleList: text)
         // Forget lists compiled by earlier versions or earlier pause settings.
-        if json == nil, let identifiers = await store.getAvailableContentRuleListIdentifiers() {
+        if json == nil, let identifiers = await Self.identifiers(in: store) {
             for old in identifiers where old.hasPrefix("aster-blocker-") && old != name {
                 try? await store.removeContentRuleList(forIdentifier: old)
             }
         }
         return list
+    }
+
+    private static func identifiers(in store: WKContentRuleListStore) async -> [String]? {
+        await withCheckedContinuation { continuation in
+            store.getAvailableContentRuleListIdentifiers { continuation.resume(returning: $0) }
+        }
     }
 }
