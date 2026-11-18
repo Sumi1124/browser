@@ -115,6 +115,7 @@ enum WebViewFactory {
         // Many sites check for "Safari" to decide which features to serve.
         configuration.applicationNameForUserAgent = "Version/18.0 Safari/605.1.15"
         configuration.allowsAirPlayForMediaPlayback = true
+        ContentBlockerManager.shared.attach(to: configuration.userContentController)
         // Lets video players (YouTube, Vimeo…) use their full-screen button.
         configuration.preferences.isElementFullscreenEnabled = true
         return configuration

@@ -53,6 +53,8 @@ USING ASTER
   lists your bookmarks; Option-Cmd-B opens them in the sidebar, where you
   can sort them into folders and import bookmarks from Safari or Chrome.
 - Cmd-F finds text on the page; Cmd-G and Shift-Cmd-G move between matches.
+- Aster blocks ads and trackers by default (Aster > Block Ads and Trackers).
+  If a page doesn't work, choose Aster > Pause Blocking on This Site.
 - The Workspaces menu opens separate windows for Personal, Business,
   IB MYP, IB Diploma Programme and Research. Each workspace keeps its own
   website logins and cookies.

@@ -42,10 +42,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             urls.append(url)
         }
         pendingURLs = []
-        let first = BrowserWindowController.open(context: currentContext, url: urls.first)
-        for url in urls.dropFirst() { BrowserWindowController.open(context: first.context, url: url, tabbedWith: first.window, focus: false) }
-        if arguments.contains("--show-tools") { first.setToolsVisible(true) }
-        activateApp()
+        let startURLs = urls
+        // Load the blocking rules first (a cached list takes milliseconds) so the
+        // first page already loads without ads and trackers.
+        Task { @MainActor in
+            await ContentBlockerManager.shared.refresh()
+            let first = BrowserWindowController.open(context: currentContext, url: startURLs.first)
+            for url in startURLs.dropFirst() { BrowserWindowController.open(context: first.context, url: url, tabbedWith: first.window, focus: false) }
+            if arguments.contains("--show-tools") { first.setToolsVisible(true) }
+            activateApp()
+        }
         Updater.shared.startAutomaticChecks()
     }
 
@@ -122,6 +128,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "q" || $0.name == "p" }?.value ?? ""
         }
         SplitSearchWindowController.open(context: currentContext, query: query)
+    }
+
+    @IBAction func toggleBlocking(_ sender: Any?) {
+        ContentBlockerManager.shared.isEnabled.toggle()
+        reloadFrontTab()
+    }
+
+    @IBAction func togglePausedSite(_ sender: Any?) {
+        guard let pane = (NSApp.keyWindow?.windowController as? BrowserWindowController)?.pane else { return }
+        let url = pane.webView.url
+        let blocker = ContentBlockerManager.shared
+        let pause = !blocker.isPaused(for: url)
+        Task { @MainActor in
+            await blocker.setPaused(pause, for: url)
+            pane.webView.reload()
+        }
+    }
+
+    private func reloadFrontTab() {
+        (NSApp.keyWindow?.windowController as? BrowserWindowController)?.pane.webView.reload()
     }
 
     @IBAction func selectSearchEngine(_ sender: NSMenuItem) {
@@ -217,6 +243,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(reopenClosedTab(_:)) { return !closedTabs.isEmpty }
         if item.action == #selector(toggleAutomaticUpdates(_:)) { item.state = Updater.shared.automaticChecks ? .on : .off }
+        if item.action == #selector(toggleBlocking(_:)) { item.state = ContentBlockerManager.shared.isEnabled ? .on : .off }
+        if item.action == #selector(togglePausedSite(_:)) {
+            let url = (NSApp.keyWindow?.windowController as? BrowserWindowController)?.pane.webView.url
+            guard let site = ContentBlockerManager.site(of: url) else {
+                item.title = "Pause Blocking on This Site"
+                return false
+            }
+            item.title = ContentBlockerManager.shared.isPaused(for: url) ? "Resume Blocking on \(site)" : "Pause Blocking on \(site)"
+            return ContentBlockerManager.shared.isEnabled
+        }
         if item.action == #selector(selectSearchEngine(_:)) {
             item.state = (item.representedObject as? String) == searchProvider.id ? .on : .off
         }
@@ -265,6 +301,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             item("Check for Updates Automatically", #selector(toggleAutomaticUpdates(_:))),
             .separator(),
             engineItem,
+            item("Block Ads and Trackers", #selector(toggleBlocking(_:))),
+            item("Pause Blocking on This Site", #selector(togglePausedSite(_:))),
             item("Set as Default Browser…", #selector(setAsDefaultBrowser(_:))),
             .separator(),
             item("Hide Aster", #selector(NSApplication.hide(_:)), "h"),

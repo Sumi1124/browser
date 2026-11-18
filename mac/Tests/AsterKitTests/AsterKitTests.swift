@@ -253,3 +253,93 @@ final class UpdateFallbackTests: XCTestCase {
         XCTAssertTrue(html.contains("<footer>Aster 0.8.0</footer>"))
     }
 }
+
+final class ContentBlockerTests: XCTestCase {
+    private func rules(_ json: String) throws -> [[String: Any]] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+    }
+
+    private func matches(_ pattern: String, _ url: String) -> Bool {
+        url.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    func testRulesAreValidAndWithinWebKitLimits() throws {
+        let all = try rules(ContentBlocker.rulesJSON())
+        XCTAssertGreaterThan(all.count, 100)
+        XCTAssertLessThan(all.count, 50_000)
+        for rule in all {
+            let trigger = try XCTUnwrap(rule["trigger"] as? [String: Any])
+            let action = try XCTUnwrap(rule["action"] as? [String: Any])
+            XCTAssertNotNil(trigger["url-filter"] as? String)
+            XCTAssertNotNil(action["type"] as? String)
+        }
+        XCTAssertEqual(ContentBlocker.rulesJSON(), ContentBlocker.rulesJSON(), "output is deterministic so the compiled list can be cached")
+    }
+
+    func testListsAreCleanAndHaveNoDuplicates() {
+        let domains = ContentBlocker.adDomains + ContentBlocker.trackerDomains
+        XCTAssertEqual(Set(domains).count, domains.count, "duplicate domains")
+        for domain in domains {
+            XCTAssertEqual(ContentBlocker.normalizedSite(domain), domain, "\(domain) is not a plain lowercase host name")
+        }
+        // Hosts that ordinary sites depend on must never be listed.
+        for essential in ["google.com", "youtube.com", "gstatic.com", "cloudfront.net", "googleapis.com", "github.com", "wikipedia.org"] {
+            XCTAssertFalse(domains.contains(essential), essential)
+        }
+    }
+
+    func testHostPatternMatchesTheHostAndItsSubdomainsOnly() {
+        let pattern = ContentBlocker.hostPattern("doubleclick.net")
+        XCTAssertTrue(matches(pattern, "https://doubleclick.net/ad.js"))
+        XCTAssertTrue(matches(pattern, "https://ad.doubleclick.net/ad.js"))
+        XCTAssertTrue(matches(pattern, "https://x.y.doubleclick.net:8443/ad.js"))
+        XCTAssertTrue(matches(pattern, "http://doubleclick.net/"))
+        XCTAssertFalse(matches(pattern, "https://notdoubleclick.net/ad.js"))
+        XCTAssertFalse(matches(pattern, "https://doubleclick.network/ad.js"))
+        XCTAssertFalse(matches(pattern, "https://example.com/?u=doubleclick.net/"))
+        XCTAssertFalse(matches(pattern, "https://example.com/doubleclick.net/"))
+    }
+
+    func testBlockingRulesOnlyApplyToThirdPartyRequests() throws {
+        let all = try rules(ContentBlocker.rulesJSON())
+        let blocking = all.filter { ($0["action"] as? [String: Any])?["type"] as? String == "block" }
+        XCTAssertFalse(blocking.isEmpty)
+        for rule in blocking {
+            let trigger = try XCTUnwrap(rule["trigger"] as? [String: Any])
+            XCTAssertEqual(trigger["load-type"] as? [String], ["third-party"])
+        }
+    }
+
+    func testScriptPatterns() {
+        let facebook = ContentBlocker.scriptPatterns[0]
+        XCTAssertTrue(matches(facebook, "https://connect.facebook.net/en_US/fbevents.js"))
+        XCTAssertFalse(matches(facebook, "https://connect.facebook.net/en_US/sdk.js"))
+    }
+
+    func testPausedSitesComeLastAndCoverSubdomains() throws {
+        let all = try rules(ContentBlocker.rulesJSON(allowedSites: ["WWW.Example.com", "bad host", "school.example.org", "example.com"]))
+        let last = try XCTUnwrap(all.last)
+        XCTAssertEqual((last["action"] as? [String: Any])?["type"] as? String, "ignore-previous-rules")
+        let trigger = try XCTUnwrap(last["trigger"] as? [String: Any])
+        XCTAssertEqual(trigger["if-domain"] as? [String], ["*example.com", "*school.example.org"])
+        let without = try rules(ContentBlocker.rulesJSON())
+        XCTAssertEqual(all.count, without.count + 1)
+    }
+
+    func testNormalizedSite() {
+        XCTAssertEqual(ContentBlocker.normalizedSite("WWW.Wikipedia.org"), "wikipedia.org")
+        XCTAssertEqual(ContentBlocker.normalizedSite(" docs.python.org "), "docs.python.org")
+        XCTAssertEqual(ContentBlocker.normalizedSite("127.0.0.1"), "127.0.0.1")
+        for bad in ["", "localhost", "a..b", ".example.com", "example.com.", "-x.com", "exa mple.com", "https://example.com", "例え.jp", "a/b.com"] {
+            XCTAssertNil(ContentBlocker.normalizedSite(bad), bad)
+        }
+    }
+
+    func testIdentifierChangesWithTheRules() {
+        let a = ContentBlocker.identifier(for: ContentBlocker.rulesJSON())
+        let b = ContentBlocker.identifier(for: ContentBlocker.rulesJSON(allowedSites: ["example.com"]))
+        XCTAssertNotEqual(a, b)
+        XCTAssertEqual(a, ContentBlocker.identifier(for: ContentBlocker.rulesJSON()))
+        XCTAssertTrue(a.hasPrefix("aster-blocker-"))
+    }
+}

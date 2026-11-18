@@ -1,6 +1,7 @@
 // Copyright 2026 Aster contributors. BSD-3-Clause; see LICENSE.
 import AppKit
 import AsterKit
+import Network
 import WebKit
 
 /// `Aster --self-test`: launches the real app machinery without showing
@@ -206,6 +207,41 @@ enum SelfTest {
                   "split search panes fill the window (\(Int(panes.left.width))×\(Int(panes.left.height)) and \(Int(panes.right.width))×\(Int(panes.right.height)))")
         splitSearch.window?.close()
 
+        // Ad and tracker blocking: WebKit accepts the real rules, blocks third-party
+        // requests to listed hosts, leaves first-party requests alone, and honours
+        // "pause on this site". A local server stands in for the internet.
+        let server = LoopbackServer()
+        let port = try await server.start()
+        defer { server.stop() }
+        func probe(_ rulesJSON: String?, page: String) async throws -> String {
+            let configuration = WKWebViewConfiguration()
+            configuration.websiteDataStore = .nonPersistent()
+            if let rulesJSON {
+                guard let list = await ContentBlockerManager.compile(json: rulesJSON) else { throw ToolsError(message: "WebKit rejected the test rules") }
+                configuration.userContentController.add(list)
+            }
+            let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), configuration: configuration)
+            keepAlive.append(view)
+            offscreen(view)
+            view.load(URLRequest(url: URL(string: "http://\(page)/\(page.hasPrefix("localhost") ? "first" : "third")")!))
+            var title = ""
+            try await waitUntil("the blocking test page") {
+                title = view.title ?? ""
+                return title == "loaded" || title == "blocked"
+            }
+            return title
+        }
+        let thirdParty = "127.0.0.1:\(port)"
+        let firstParty = "localhost:\(port)"
+        let localhostRules = ContentBlocker.rulesJSON(blocking: ["localhost"], patterns: [], hide: [])
+        let realRules = await ContentBlockerManager.compile()
+        try check(realRules != nil, "WebKit accepts the real ad and tracker rules (\(ContentBlocker.adDomains.count + ContentBlocker.trackerDomains.count) hosts)")
+        try check(try await probe(nil, page: thirdParty) == "loaded", "third-party images load when blocking is off")
+        try check(try await probe(localhostRules, page: thirdParty) == "blocked", "a listed third-party host is blocked")
+        try check(try await probe(localhostRules, page: firstParty) == "loaded", "a site's own requests are never blocked")
+        let pausedRules = ContentBlocker.rulesJSON(blocking: ["localhost"], patterns: [], hide: [], allowedSites: ["127.0.0.1"])
+        try check(try await probe(pausedRules, page: thirdParty) == "loaded", "pausing blocking on a site lets its requests through")
+
         // Opening and closing the sidebar applies to every tab.
         let tabA = BrowserWindowController.open(context: .makePrivate(), url: URL(string: "about:blank"))
         let tabB = BrowserWindowController.open(context: tabA.context, url: URL(string: "about:blank"), tabbedWith: tabA.window)
@@ -254,5 +290,68 @@ enum SelfTest {
         } else {
             print("  --  GitHub API unavailable here; the Releases page fallback was used")
         }
+    }
+}
+
+/// A tiny HTTP server on this Mac's loopback interface for the self-test. It
+/// serves a page with one image from a different host name, and the image.
+final class LoopbackServer: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "aster.self-test.server")
+    private var listener: NWListener?
+    private var port: UInt16 = 0
+
+    private static let pixel = Data(base64Encoded: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")!
+
+    func start() async throws -> UInt16 {
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .loopback
+        let listener = try NWListener(using: parameters)
+        self.listener = listener
+        listener.newConnectionHandler = { [weak self] connection in self?.serve(connection) }
+        return try await withCheckedThrowingContinuation { continuation in
+            let lock = NSLock()
+            var finished = false
+            listener.stateUpdateHandler = { [weak self] state in
+                lock.lock(); defer { lock.unlock() }
+                guard !finished else { return }
+                switch state {
+                case .ready:
+                    finished = true
+                    self?.port = listener.port?.rawValue ?? 0
+                    continuation.resume(returning: listener.port?.rawValue ?? 0)
+                case .failed(let error):
+                    finished = true
+                    continuation.resume(throwing: error)
+                default: break
+                }
+            }
+            listener.start(queue: queue)
+        }
+    }
+
+    func stop() { listener?.cancel() }
+
+    private func serve(_ connection: NWConnection) {
+        connection.start(queue: queue)
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 16384) { [weak self] data, _, _, _ in
+            guard let self, let data, let request = String(data: data, encoding: .utf8) else { connection.cancel(); return }
+            let path = request.split(separator: " ").dropFirst().first.map(String.init) ?? "/"
+            let type: String
+            let body: Data
+            switch path {
+            case "/pixel.gif":
+                type = "image/gif"; body = Self.pixel
+            case "/first":
+                type = "text/html"; body = Data(Self.page(image: "/pixel.gif").utf8)
+            default:
+                type = "text/html"; body = Data(Self.page(image: "http://localhost:\(self.port)/pixel.gif").utf8)
+            }
+            let head = "HTTP/1.1 200 OK\r\nContent-Type: \(type)\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+            connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in connection.cancel() })
+        }
+    }
+
+    private static func page(image: String) -> String {
+        "<!doctype html><title>waiting</title><img src=\"\(image)\" onload=\"document.title='loaded'\" onerror=\"document.title='blocked'\">"
     }
 }
